@@ -1,26 +1,45 @@
 
-#pragma once
+#ifndef __FILTER_HEADER__
+#define __FILTER_HEADER__
 
+#include <sstream>
 #include <string>
 #include <vector>
-#include <functional>
 
 namespace ruda {
 
   const int RUDA_ERR = -1;
   const int RUDA_OK = 0;
 
-  enum Operator {
-    EQ, LESS, GREATER, LESS_EQ, GREATER_EQ,
+  enum CompOperator {
+    EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ,
   };
 
-  template <typename T>
-  class Comparator;
+  inline std::string toStringCompOperator(CompOperator op) {
+    switch (op) {
+      case EQ: return "EQ";
+      case LESS: return "LESS";
+      case GREATER: return "GREATER";
+      case LESS_EQ: return "LESS_EQ";
+      case GREATER_EQ: return "GREATER_EQ";
+      default: return "INVALID";
+    }
+  }
 
-  int test(int a);
+  struct IntComparator {
+    CompOperator _op;
+    int _pivot;
 
-  template <typename T>
-  int sstFilter(const std::vector<T>& values,
-                const Comparator<T>& cond,
-                std::vector<bool>& results);
+    std::string toString() const {
+      std::stringstream ss;
+      ss << "_op: " << toStringCompOperator(this->_op) << ", "
+        << "_pivot: " << _pivot;
+      return ss.str();
+    }
+  };
+
+  int sstIntFilter(const std::vector<int>& values,
+                   const IntComparator rawComp,
+                   std::vector<bool>& results);
 }
+#endif

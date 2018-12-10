@@ -1,6 +1,7 @@
 #include "filter.h"
 
 #include <stdio.h>
+#include <iostream>
 #include <vector>
 #include <string>
 #include <thrust/device_vector.h>
@@ -11,67 +12,83 @@
 
 namespace ruda {
 
-  template <typename T>
-  class Comparator {
-    public:
-      Comparator(Operator op, T pivot) {
-        this->_op = op;
-        this->_pivot = pivot;
-      }
+  struct CudaIntComparator {
+    IntComparator _rawComp;
 
-    __host__ __device__
-    bool operator()(const T& target) const {
-      printf("Print on Comparator\n");
-      return false;
-      // switch (this->_op) {
-      //   case EQ:
-      //     return std::equal_to<T>()(target, pivot);
-      //   case LESS:
-      //     return std::less<T>()(target, pivot);
-      //   case GREATER:
-      //     return std::greater<T>()(target, pivot);
-      //   case LESS_EQ:
-      //     return std::less_equal<T>()(target, pivot);
-      //   case GREATER_EQ:
-      //     return std::greater_equal<T>()(target, pivot);
-      //   default:
-      //     throw new runtime_error("[RUDA][COMPARATOR] Invalid Operator Type");
-      // }
+    CudaIntComparator(IntComparator rawComp) {
+      this->_rawComp = rawComp;
     }
 
-    private:
-      Operator _op;
-      T _pivot;
+    __host__ __device__
+    bool operator()(const int target) {
+      switch (this->_rawComp._op) {
+        case EQ:
+          return target == this->_rawComp._pivot;
+        case LESS:
+          return target < this->_rawComp._pivot;
+        case GREATER:
+          return target > this->_rawComp._pivot;
+        case LESS_EQ:
+          return target <= this->_rawComp._pivot;
+        case GREATER_EQ:
+          return target >= this->_rawComp._pivot;
+        default:
+          return false;
+      }
+    }
+
+    std::string toString() {
+      return this->_rawComp.toString();
+    }
   };
 
-  int test(int a) {
-    return a + 3;
-  }
+  int sstIntFilter(const std::vector<int>& values,
+                   const IntComparator rawComp,
+                   std::vector<bool>& results) {
+    std::cout << "[RUDA][sstIntFilter] Start" << std::endl;
+    results.resize(values.size());
 
-  template <typename T>
-  int sstFilter(const std::vector<T>& values,
-                const Comparator<T>& cond,
-                std::vector<bool>& results) {
-    printf("Print on sstFilter\n");
-    thrust::device_vector<T> d_values(values);
+    std::cout << "[sstIntFilter] Inputs" << std::endl;
+    std::cout << "[sstIntFilter] Inputs - values" << std::endl;
+    for (int i = 0; i < values.size(); ++i) {
+      std::cout << values[i] << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "[sstIntFilter] Inputs - rawComp: " << rawComp.toString()
+        << std::endl;
+
+    thrust::device_vector<int> d_values(values);
     thrust::device_vector<int> d_results(values.size());
 
-    thrust::copy_if(d_values.begin(), d_values.end(), d_results.begin(), cond());
-    thrust::copy(d_values.begin(), d_values.end(), results.begin());
+    CudaIntComparator cudaComp(rawComp);
+
+    std::cout << "[sstIntFilter] Devices" << std::endl;
+    std::cout << "[sstIntFilter] Devices - d_values" << std::endl;
+    for (int i = 0; i < d_values.size(); ++i) {
+      std::cout << d_values[i] << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "[sstIntFilter] cudaComp: " << cudaComp.toString() << std::endl;
+
+    thrust::copy_if(d_values.begin(), d_values.end(), d_results.begin(),
+                    cudaComp);
+    cudaDeviceSynchronize();
+
+    std::cout << "[sstIntFilter] Results" << std::endl;
+    std::cout << "[sstIntFilter] Results - d_results" << std::endl;
+    for (int i = 0; i < d_results.size(); ++i) {
+      std::cout << d_results[i] << " ";
+    }
+    std::cout << std::endl;
+
+    thrust::copy(d_results.begin(), d_results.end(), results.begin());
+    std::cout << "[sstIntFilter] Results - results" << std::endl;
+    for (int i = 0; i < results.size(); ++i) {
+      std::cout << results[i] << " ";
+    }
+    std::cout << std::endl;
 
     return ruda::RUDA_OK;
   }
-
-  // Workaround(totoro): Template implementation needs to notify to Compiler.
-  // https://stackoverflow.com/questions/495021/why-can-templates-only-be-implemented-in-the-header-file
-  template int sstFilter<int>(const std::vector<int>& values,
-                              const Comparator<int>& cond,
-                              std::vector<bool>& results);
-  template int sstFilter<float>(const std::vector<float>& values,
-                                const Comparator<float>& cond,
-                                std::vector<bool>& results);
-  template int sstFilter<std::string>(const std::vector<std::string>& values,
-                                      const Comparator<std::string>& cond,
-                                      std::vector<bool>& results);
 }
 

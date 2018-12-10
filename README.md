@@ -1,3 +1,9 @@
+## RocksDB-GPU: GPU-Accelerated RocksDB
+Implements CUDA-based GPU modules on RocksDB. (Experiments)
+
+Basic Functions
+- Value filtering on SST files by GPU
+
 ## RocksDB: A Persistent Key-Value Store for Flash and RAM Storage
 
 [![Linux/Mac Build Status](https://travis-ci.org/facebook/rocksdb.svg?branch=master)](https://travis-ci.org/facebook/rocksdb)

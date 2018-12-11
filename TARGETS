@@ -204,6 +204,7 @@ cpp_library(
         "table/plain_table_key_coding.cc",
         "table/plain_table_reader.cc",
         "table/sst_file_reader.cc",
+	"table/sst_file_filter_reader.cc"
         "table/sst_file_writer.cc",
         "table/table_properties.cc",
         "table/two_level_iterator.cc",
@@ -995,6 +996,10 @@ ROCKS_TESTS = [
         "table/sst_file_reader_test.cc",
         "serial",
     ],
+    [
+        "sst_file_filter_reader_test",
+	"table/sst_file_filter_reader_test.cc",
+	"serial"
     [
         "statistics_test",
         "monitoring/statistics_test.cc",

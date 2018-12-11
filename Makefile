@@ -556,6 +556,7 @@ TESTS = \
 	range_tombstone_fragmenter_test \
 	range_del_aggregator_v2_test \
 	sst_file_reader_test \
+	sst_file_filter_reader_test \
 
 PARALLEL_TEST = \
 	backupable_db_test \
@@ -1592,6 +1593,9 @@ range_del_aggregator_v2_test: db/range_del_aggregator_v2_test.o db/db_test_util.
 	$(AM_LINK)
 
 sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
+sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 #-------------------------------------------------

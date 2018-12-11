@@ -124,6 +124,7 @@ LIB_SOURCES =                                                   \
   table/plain_table_key_coding.cc                               \
   table/plain_table_reader.cc                                   \
   table/sst_file_reader.cc                                      \
+  table/sst_file_filter_reader.cc                               \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
@@ -365,6 +366,7 @@ MAIN_SOURCES =                                                          \
   table/full_filter_block_test.cc                                       \
   table/merger_test.cc                                                  \
   table/sst_file_reader_test.cc                                         \
+  table/sst_file_filter_reader_test.cc                                  \
   table/table_reader_bench.cc                                           \
   table/table_test.cc                                                   \
   third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc                  \

@@ -1,8 +1,11 @@
+# This Makefile uses only test for CUDA-g++ link testing...
+# Don't use this makefile for build up rocksDB
+
 build:
 	nvcc -c filter.cu -o filter.o
 	clang++ -c filter_test.cc -o filter_test.o -std=c++11
-	clang++ -o runnable_filter_test filter.o filter_test.o \
-		-L/usr/local/cuda/lib64 \
+	clang++ -o runnable_filter_test filter.o filter_test.o  \
+		-L/usr/local/cuda/lib64                               \
 		-lcudart
 
 run:

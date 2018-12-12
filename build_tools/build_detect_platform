@@ -85,6 +85,16 @@ if test -z "$CXX"; then
     fi
 fi
 
+# RocksDB-GPU
+# RocksDB-GPU uses nvcc compiler for NVCC GPU compiler.
+if test -z "$NVCC"; then
+    if [ -x "$(command -v nvcc)" ]; then
+        NVCC=nvcc
+    else
+        NVCC=nvcc
+    fi
+fi
+
 # Detect OS
 if test -z "$TARGET_OS"; then
     TARGET_OS=`uname -s`
@@ -595,6 +605,9 @@ ROCKSDB_PATCH=`build_tools/version.sh patch`
 
 echo "CC=$CC" >> "$OUTPUT"
 echo "CXX=$CXX" >> "$OUTPUT"
+# RocksDB-GPU
+# Adds NVCC compiler to output make_config.mk file.
+echo "NVCC=$NVCC" >> "$OUTPUT"
 echo "PLATFORM=$PLATFORM" >> "$OUTPUT"
 echo "PLATFORM_LDFLAGS=$PLATFORM_LDFLAGS" >> "$OUTPUT"
 echo "JAVA_LDFLAGS=$JAVA_LDFLAGS" >> "$OUTPUT"

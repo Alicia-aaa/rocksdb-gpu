@@ -17,6 +17,18 @@ MACHINE ?= $(shell uname -m)
 ARFLAGS = ${EXTRA_ARFLAGS} rs
 STRIPFLAGS = -S -x
 
+# RocksDB-GPU
+# Flags for NVCC compiler. If NVCC flag need, please add to this variable.
+NVCCFLAGS += $(EXTRA_NVCCFLAGS)
+
+# RocksDB-GPU
+# Needs to add '.cu' suffix to SUFFIXES explicitly...
+.SUFFIXES: .c .S .cc .cu .o
+
+# RocksDB-GPU
+# CUDA_LDFLAGS for appending LDFLAGS
+CUDA_LDFLAGS = -L/usr/local/cuda/lib64 -lcudart
+
 # Transform parallel LOG output into something more readable.
 perl_command = perl -n \
   -e '@a=split("\t",$$_,-1); $$t=$$a[8];'				\
@@ -185,11 +197,22 @@ am__v_AR_ = $(am__v_AR_$(AM_DEFAULT_VERBOSITY))
 am__v_AR_0 = @echo "  AR      " $@;
 am__v_AR_1 =
 
+# RocksDB-GPU
+# Makes command line verbosity logs for NVCC.
+AM_V_NVCC= $(am__v_NVCC_$(V))
+am__v_NVCC_ = $(am__v_NVCC_$(AM_DEFAULT_VERBOSITY))
+am__v_NVCC_0 = @echo "  NVCC    " $@;
+am__v_NVCC_1 =
+
 ifdef ROCKSDB_USE_LIBRADOS
 LIB_SOURCES += utilities/env_librados.cc
 LDFLAGS += -lrados
 endif
 
+# RocksDB-GPU
+# Adds CUDA-related link options to link flags
+# ex) -L/usr/local/cuda/lib64, -lcudart, ...
+LDFLAGS += $(CUDA_LDFLAGS)
 AM_LINK = $(AM_V_CCLD)$(CXX) $^ $(EXEC_LDFLAGS) -o $@ $(LDFLAGS) $(COVERAGEFLAGS)
 # detect what platform we're building on
 dummy := $(shell (export ROCKSDB_ROOT="$(CURDIR)"; export PORTABLE="$(PORTABLE)"; "$(CURDIR)/build_tools/build_detect_platform" "$(CURDIR)/make_config.mk"))
@@ -387,6 +410,10 @@ LIBOBJECTS += $(LIB_SOURCES_ASM:.S=.o)
 else
 LIB_CC_OBJECTS = $(LIB_SOURCES:.cc=.o)
 endif
+
+# RocksDB-GPU
+# Makes cuda object lists by sources.
+CUDAOBJECTS = $(CUDA_SOURCES:.cu=.o)
 
 LIBOBJECTS += $(TOOL_LIB_SOURCES:.cc=.o)
 MOCKOBJECTS = $(MOCK_LIB_SOURCES:.cc=.o)
@@ -696,7 +723,7 @@ endif  # PLATFORM_SHARED_EXT
 .PHONY: blackbox_crash_test check clean coverage crash_test ldb_tests package \
 	release tags tags0 valgrind_check whitebox_crash_test format static_lib shared_lib all \
 	dbg rocksdbjavastatic rocksdbjava install install-static install-shared uninstall \
-	analyze tools tools_lib
+	analyze tools tools_lib cuda \
 
 
 all: $(LIBRARY) $(BENCHMARKS) tools tools_lib test_libs $(TESTS)
@@ -714,6 +741,10 @@ tools_lib: $(TOOLS_LIBRARY)
 test_libs: $(TEST_LIBS)
 
 dbg: $(LIBRARY) $(BENCHMARKS) tools $(TESTS)
+
+# RocksDB-GPU
+# Makes cuda related objects
+cuda: $(CUDAOBJECTS)
 
 # creates static library and programs
 release:
@@ -1068,9 +1099,9 @@ package:
 # ---------------------------------------------------------------------------
 # 	Unit tests and tools
 # ---------------------------------------------------------------------------
-$(LIBRARY): $(LIBOBJECTS)
+$(LIBRARY): $(LIBOBJECTS) $(CUDAOBJECTS)
 	$(AM_V_AR)rm -f $@
-	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS)
+	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS) $(CUDAOBJECTS)
 
 $(TOOLS_LIBRARY): $(BENCH_LIB_SOURCES:.cc=.o) $(TOOL_LIB_SOURCES:.cc=.o) $(LIB_SOURCES:.cc=.o) $(TESTUTIL) $(ANALYZER_LIB_SOURCES:.cc=.o)
 	$(AM_V_AR)rm -f $@
@@ -1592,7 +1623,9 @@ range_tombstone_fragmenter_test: db/range_tombstone_fragmenter_test.o db/db_test
 range_del_aggregator_v2_test: db/range_del_aggregator_v2_test.o db/db_test_util.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
-sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(TESTHARNESS)
+# RocksDB-GPU
+# Adds CUDAOBJECTS for build up cuda-related codes for test.
+sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(TESTHARNESS)
@@ -1954,6 +1987,11 @@ IOSVERSION=$(shell defaults read $(PLATFORMSROOT)/iPhoneOS.platform/version CFBu
 	xcrun -sdk iphoneos $(CC) $(CFLAGS) -isysroot $(DEVICEROOT)/SDKs/iPhoneOS$(IOSVERSION).sdk -arch armv6 -arch armv7 -arch armv7s -arch arm64 -c $< -o ios-arm/$@
 	lipo ios-x86/$@ ios-arm/$@ -create -output $@
 
+# RocksDB-GPU
+# Suffix rule for ".cu -> .o" compilation.
+.cu.o:
+	@echo "TODO(totoro): Not yet implemented for iOS"
+
 else
 ifeq ($(HAVE_POWER8),1)
 util/crc32c_ppc.o: util/crc32c_ppc.c
@@ -1967,6 +2005,11 @@ endif
 
 .c.o:
 	$(AM_V_CC)$(CC) $(CFLAGS) -c $< -o $@
+
+# RocksDB-GPU
+# Suffix rule for ".cu -> .o" compilation.
+.cu.o:
+	$(AM_V_NVCC)$(NVCC) $(NVCCFLAGS) -c $< -o $@
 endif
 # ---------------------------------------------------------------------------
 #  	Source files dependencies detection
@@ -1974,6 +2017,9 @@ endif
 
 all_sources = $(LIB_SOURCES) $(MAIN_SOURCES) $(MOCK_LIB_SOURCES) $(TOOL_LIB_SOURCES) $(BENCH_LIB_SOURCES) $(TEST_LIB_SOURCES) $(EXP_LIB_SOURCES) $(ANALYZER_LIB_SOURCES)
 DEPFILES = $(all_sources:.cc=.cc.d)
+
+# RocksDB-GPU
+# TODO(totoro): Adds dependency support for CUDA-related sources...
 
 # Add proper dependency support so changing a .h file forces a .cc file to
 # rebuild.

@@ -11,7 +11,7 @@ int main() {
   };
 
   std::vector<int> values{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-  std::vector<bool> results;
+  std::vector<int> results;
 
   std::cout << "[FILTER_TEST] Run SST Filter" << std::endl;
   ruda::sstIntFilter(values, ctx, results);

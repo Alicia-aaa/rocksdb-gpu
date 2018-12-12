@@ -40,6 +40,7 @@ struct ConditionContext {
 
 int sstIntFilter(const std::vector<int>& values,
                  const ConditionContext context,
-                 std::vector<bool>& results);
-}
+                 std::vector<int>& results);
+
+}  // namespace ruda
 #endif

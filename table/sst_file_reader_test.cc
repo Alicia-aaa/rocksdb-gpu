@@ -12,6 +12,7 @@
 #include "util/testharness.h"
 #include "util/testutil.h"
 #include "utilities/merge_operators.h"
+#include "cuda/filter.h"
 
 namespace rocksdb {
 
@@ -86,6 +87,23 @@ TEST_F(SstFileReaderTest, Uint64Comparator) {
     keys.emplace_back(EncodeAsUint64(i));
   }
   CreateFileAndCheck(keys);
+}
+
+// RocksDB-GPU
+// Testing CUDA link availability.
+TEST_F(SstFileReaderTest, CudaSstValueFilter) {
+  ruda::ConditionContext ctx = { ruda::EQ, 5 };
+  std::vector<int> values{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  std::vector<int> results;
+
+  ruda::sstIntFilter(values, ctx, results);
+  for (size_t i = 0; i < results.size(); ++i) {
+    if (i == 4) {
+      ASSERT_EQ(results[i], 1);
+    } else {
+      ASSERT_EQ(results[i], 0);
+    }
+  }
 }
 
 }  // namespace rocksdb

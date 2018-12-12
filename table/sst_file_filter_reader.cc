@@ -71,6 +71,18 @@ Iterator* SstFileFilterReader::NewIterator(const ReadOptions& options) {
                        nullptr /* read_callback */);
 }
 
+Status SstFileFilterReader::filterWithCPU() {
+	Status s;
+
+	return s;
+}
+
+Status SstFileFilterReader::filterWithGPU() {
+	Status s;
+
+	return s;
+}
+
 std::shared_ptr<const TableProperties> SstFileFilterReader::GetTableProperties() const {
   return rep_->table_reader->GetTableProperties();
 }

@@ -8,6 +8,7 @@
 
 
 #include <inttypes.h>
+#include <ctime>
 
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
@@ -27,6 +28,23 @@ std::string EncodeAsUint64(uint64_t v) {
   std::string dst;
   PutFixed64(&dst, v);
   return dst;
+}
+
+int filterPredicateCPU(const int target, ruda::ConditionContext ctx) {
+  switch (ctx._op) {
+    case 0:
+      return target == ctx._pivot ? 1 : 0;
+    case 1:
+      return target < ctx._pivot ? 1 : 0;
+    case 2:
+      return target > ctx._pivot ? 1 : 0;
+    case 3:
+      return target <= ctx._pivot ? 1 : 0;
+    case 4:
+      return target >= ctx._pivot ? 1 : 0;
+    default:
+      return 0;
+  }
 }
 
 class SstFileFilterReaderTest : public testing::Test {
@@ -65,6 +83,32 @@ class SstFileFilterReaderTest : public testing::Test {
     ASSERT_FALSE(iter->Valid());
   }
 
+  void FilterWithCPU(std::vector<std::string> &keys, ruda::ConditionContext ctx, std::vector<int> &results) {
+	SstFileWriter writer(soptions_, options_);
+	srand((unsigned int)time(NULL));
+	ASSERT_OK(writer.Open(sst_name_));
+	for (size_t i = 0; i < keys.size(); i ++) {
+		ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
+	}
+	ASSERT_OK(writer.Finish());
+
+	ReadOptions ropts;
+    SstFileFilterReader reader(options_);
+    reader.Open(sst_name_);
+    reader.VerifyChecksum();
+
+    std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+    iter->SeekToFirst();
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    	iter->Valid();
+    	results.emplace_back(filterPredicateCPU(atoi(iter->value().data()), ctx));
+      }
+
+  }
+
+//  void FilterWithGPU(const std::vector<std::string>& keys) {
+//  }
+
  protected:
   Options options_;
   EnvOptions soptions_;
@@ -89,6 +133,32 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   }
   CreateFileAndCheck(keys);
 }
+
+TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
+  options_.comparator = test::Uint64Comparator();
+  std::vector<std::string> keys;
+  for (uint64_t i = 0; i < kNumKeys; i++) {
+	keys.emplace_back(EncodeAsUint64(i));
+  }
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<int> results;
+  FilterWithCPU(keys, ctx, results);
+
+  std::cout << "[FILTER_TEST] Results" << std::endl;
+  for (unsigned int i = 0; i < results.size(); ++i) {
+    std::cout << results[i] << " ";
+  }
+  std::cout << std::endl;
+}
+
+//TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
+//  options_.comparator = test::Uint64Comparator();
+//  std::vector<std::string> keys;
+//  for (uint64_t i = 0; i < kNumKeys; i++) {
+//    keys.emplace_back(EncodeAsUint64(i));
+//  }
+//  FilterWithGPU(keys);
+//}
 
 }  // namespace rocksdb
 

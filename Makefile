@@ -1628,7 +1628,7 @@ range_del_aggregator_v2_test: db/range_del_aggregator_v2_test.o db/db_test_util.
 sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
-sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(TESTHARNESS)
+sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 #-------------------------------------------------

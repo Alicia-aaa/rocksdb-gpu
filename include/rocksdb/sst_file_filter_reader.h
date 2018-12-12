@@ -12,6 +12,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/table_properties.h"
+#include "cuda/filter.h"
 
 namespace rocksdb {
 
@@ -30,6 +31,9 @@ class SstFileFilterReader {
   // Most read options provide the same control as we read from DB.
   // If "snapshot" is nullptr, the iterator returns only the latest keys.
   Iterator* NewIterator(const ReadOptions& options);
+
+  Status filterWithCPU();
+  Status filterWithGPU();
 
   std::shared_ptr<const TableProperties> GetTableProperties() const;
 

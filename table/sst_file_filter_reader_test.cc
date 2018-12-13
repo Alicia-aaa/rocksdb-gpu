@@ -9,6 +9,7 @@
 
 #include <inttypes.h>
 #include <ctime>
+#include <time.h>
 
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
@@ -84,6 +85,8 @@ class SstFileFilterReaderTest : public testing::Test {
   }
 
   void FilterWithCPU(std::vector<std::string> &keys, ruda::ConditionContext ctx, std::vector<int> &results) {
+	clock_t begin, end;
+
 	SstFileWriter writer(soptions_, options_);
 	srand((unsigned int)time(NULL));
 	ASSERT_OK(writer.Open(sst_name_));
@@ -98,16 +101,49 @@ class SstFileFilterReaderTest : public testing::Test {
     reader.VerifyChecksum();
 
     std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+    begin = clock();
     iter->SeekToFirst();
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     	iter->Valid();
     	results.emplace_back(filterPredicateCPU(atoi(iter->value().data()), ctx));
       }
+    end = clock();
+    std::cout << " CPU time in CPU test : " << end-begin << std::endl;
+
 
   }
 
-//  void FilterWithGPU(const std::vector<std::string>& keys) {
-//  }
+  void FilterWithGPU(std::vector<std::string> &keys, ruda::ConditionContext ctx, std::vector<int> &results) {
+	clock_t begin, end, gbegin, gend;
+
+	SstFileWriter writer(soptions_, options_);
+	srand((unsigned int)time(NULL));
+	ASSERT_OK(writer.Open(sst_name_));
+	for (size_t i = 0; i < keys.size(); i ++) {
+		ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
+	}
+	ASSERT_OK(writer.Finish());
+
+	ReadOptions ropts;
+    SstFileFilterReader reader(options_);
+    reader.Open(sst_name_);
+    reader.VerifyChecksum();
+    std::vector<int> values;
+    std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+    begin = clock();
+    iter->SeekToFirst();
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    	iter->Valid();
+    	//values.emplace_back(__args)
+    	values.emplace_back(atoi(iter->value().data()));
+    }
+    end = clock();
+    gbegin = clock();
+	ruda::sstIntFilter(values, ctx, results);
+	gend = clock();
+	std::cout << " CPU time in GPU test : " << end-begin << std::endl;
+	std::cout << " GPU time in GPU test : " << gend-gbegin << std::endl;
+  }
 
  protected:
   Options options_;
@@ -115,24 +151,24 @@ class SstFileFilterReaderTest : public testing::Test {
   std::string sst_name_;
 };
 
-const uint64_t kNumKeys = 100;
+const uint64_t kNumKeys = 1000000;
 
-TEST_F(SstFileFilterReaderTest, Basic) {
-  std::vector<std::string> keys;
-  for (uint64_t i = 0; i < kNumKeys; i++) {
-    keys.emplace_back(EncodeAsString(i));
-  }
-  CreateFileAndCheck(keys);
-}
-
-TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
-  options_.comparator = test::Uint64Comparator();
-  std::vector<std::string> keys;
-  for (uint64_t i = 0; i < kNumKeys; i++) {
-    keys.emplace_back(EncodeAsUint64(i));
-  }
-  CreateFileAndCheck(keys);
-}
+//TEST_F(SstFileFilterReaderTest, Basic) {
+//  std::vector<std::string> keys;
+//  for (uint64_t i = 0; i < kNumKeys; i++) {
+//    keys.emplace_back(EncodeAsString(i));
+//  }
+//  CreateFileAndCheck(keys);
+//}
+//
+//TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
+//  options_.comparator = test::Uint64Comparator();
+//  std::vector<std::string> keys;
+//  for (uint64_t i = 0; i < kNumKeys; i++) {
+//    keys.emplace_back(EncodeAsUint64(i));
+//  }
+//  CreateFileAndCheck(keys);
+//}
 
 TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
   options_.comparator = test::Uint64Comparator();
@@ -144,21 +180,29 @@ TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
   std::vector<int> results;
   FilterWithCPU(keys, ctx, results);
 
-  std::cout << "[FILTER_TEST] Results" << std::endl;
-  for (unsigned int i = 0; i < results.size(); ++i) {
-    std::cout << results[i] << " ";
-  }
-  std::cout << std::endl;
+//  std::cout << "[CPU_FILTER_TEST] Results" << std::endl;
+//  for (unsigned int i = 0; i < results.size(); ++i) {
+//    std::cout << results[i] << " ";
+//  }
+//  std::cout << std::endl;
 }
 
-//TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
-//  options_.comparator = test::Uint64Comparator();
-//  std::vector<std::string> keys;
-//  for (uint64_t i = 0; i < kNumKeys; i++) {
-//    keys.emplace_back(EncodeAsUint64(i));
+TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
+  options_.comparator = test::Uint64Comparator();
+  std::vector<std::string> keys;
+  for (uint64_t i = 0; i < kNumKeys; i++) {
+    keys.emplace_back(EncodeAsUint64(i));
+  }
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<int> results;
+  FilterWithGPU(keys, ctx, results);
+
+//  std::cout << "[GPU_FILTER_TEST] Results" << std::endl;
+//  for (unsigned int i = 0; i < results.size(); ++i) {
+//    std::cout << results[i] << " ";
 //  }
-//  FilterWithGPU(keys);
-//}
+//  std::cout << std::endl;
+}
 
 }  // namespace rocksdb
 

@@ -58,6 +58,34 @@ Status SstFileFilterReader::Open(const std::string& file_path) {
   return s;
 }
 
+Status SstFileFilterReader::BulkReturn(const std::string& file_path, char * scratch) {
+	/* NOT YET IMPLEMENTED */
+  auto r = rep_.get();
+  Status s;
+  uint64_t file_size = 0;
+  std::unique_ptr<RandomAccessFile> file;
+  std::unique_ptr<RandomAccessFileReader> file_reader;
+  s = r->options.env->GetFileSize(file_path, &file_size);
+  if (s.ok()) {
+    s = r->options.env->NewRandomAccessFile(file_path, &file, r->soptions);
+  }
+  if (s.ok()) {
+    file_reader.reset(new RandomAccessFileReader(std::move(file), file_path));
+  }
+
+  if (s.ok()) {
+    s = r->options.table_factory->NewTableReader(
+        TableReaderOptions(r->ioptions, r->moptions.prefix_extractor.get(),
+                           r->soptions, r->ioptions.internal_comparator),
+        std::move(file_reader), file_size, &r->table_reader);
+  }
+  auto total_data_length = r->table_reader->GetTableProperties().get()->data_size;
+  Slice result;
+  file->Read(0, total_data_length, &result, scratch);
+
+  return s;
+}
+
 Iterator* SstFileFilterReader::NewIterator(const ReadOptions& options) {
   auto r = rep_.get();
   auto sequence = options.snapshot != nullptr ?

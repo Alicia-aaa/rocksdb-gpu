@@ -19,6 +19,36 @@
 
 namespace rocksdb {
 
+template <typename T>
+std::string serialize(const T * data) {
+	std::string d(sizeof(T), L'\0');
+	memcpy(&d[0], data, d.size());
+	return d;
+}
+
+std::string serializeVector(std::vector<int> v) {
+	std::ostringstream oss;
+	std::copy(v.begin(), v.end() - 1, std::ostream_iterator<int>(oss, " "));
+	oss << v.back();
+	return oss.str();
+}
+
+
+template <typename T>
+std::unique_ptr<T> deserialize(const std::string & data) {
+	if(data.size() != sizeof(T))
+		return nullptr;
+	auto d = std::unique_ptr<T>();
+	memcpy(d.get(), data.data(), data.size());
+	return d;
+}
+
+std::vector<int> deserializeVector(std::string s) {
+	std::istringstream is(s);
+	std::vector<int> v((std::istream_iterator<int>(is)), std::istream_iterator<int>());
+	return v;
+}
+
 std::string EncodeAsString(uint64_t v) {
   char buf[16];
   snprintf(buf, sizeof(buf), "%08" PRIu64, v);
@@ -52,7 +82,8 @@ class SstFileFilterReaderTest : public testing::Test {
  public:
   SstFileFilterReaderTest() {
     options_.merge_operator = MergeOperators::CreateUInt64AddOperator();
-    sst_name_ = test::PerThreadDBPath("sst_file");
+    //sst_name_ = test::PerThreadDBPath("sst_file");
+    sst_name_ = "sst_file_for_filter_read";
   }
 
   void CreateFileAndCheck(const std::vector<std::string>& keys) {
@@ -84,45 +115,47 @@ class SstFileFilterReaderTest : public testing::Test {
     ASSERT_FALSE(iter->Valid());
   }
 
-  void FilterWithCPU(std::vector<std::string> &keys, ruda::ConditionContext ctx, std::vector<int> &results) {
-	clock_t begin, end;
+  void FileWrite(std::vector<std::string> &keys) {
+	  SstFileWriter writer(soptions_, options_);
+	  srand((unsigned int)time(NULL));
+	  ASSERT_OK(writer.Open(sst_name_));
+	  for (size_t i = 0; i < keys.size(); i ++) {
+	  	ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
+//		  	ASSERT_OK(writer.Put(keys[i], keys[i]));
+	  }
+	  ASSERT_OK(writer.Finish());
+  }
 
-	SstFileWriter writer(soptions_, options_);
-	srand((unsigned int)time(NULL));
-	ASSERT_OK(writer.Open(sst_name_));
-	for (size_t i = 0; i < keys.size(); i ++) {
-		ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
-	}
-	ASSERT_OK(writer.Finish());
+  void FilterWithCPU(ruda::ConditionContext ctx, std::vector<int> &results) {
+	clock_t begin, end;
+	clock_t cbegin, cend;
 
 	ReadOptions ropts;
     SstFileFilterReader reader(options_);
     reader.Open(sst_name_);
     reader.VerifyChecksum();
 
+    std::vector<int> temp;
     std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
     begin = clock();
-    iter->SeekToFirst();
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    	iter->Valid();
-    	results.emplace_back(filterPredicateCPU(atoi(iter->value().data()), ctx));
-      }
+       temp.emplace_back(atoi(iter->value().data()));
+    }
     end = clock();
-    std::cout << " CPU time in CPU test : " << end-begin << std::endl;
+    cbegin = clock();
+    for(unsigned int j = 0; j < temp.size(); j++) {
+	   results.emplace_back(filterPredicateCPU(temp[j], ctx));
+    }
+    cend = clock();
+    std::cout << " [size : " << results.size() << "]" << std::endl;
+    std::cout << " CPU iteration time in CPU test(s) : " << (end - begin) / CLOCKS_PER_SEC << std::endl;
+    std::cout << " CPU filter time in CPU test(s) : " << (cend - cbegin) / CLOCKS_PER_SEC << std::endl;
 
 
   }
 
-  void FilterWithGPU(std::vector<std::string> &keys, ruda::ConditionContext ctx, std::vector<int> &results) {
+  void FilterWithGPU(ruda::ConditionContext ctx, std::vector<int> &results) {
 	clock_t begin, end, gbegin, gend;
-
-	SstFileWriter writer(soptions_, options_);
-	srand((unsigned int)time(NULL));
-	ASSERT_OK(writer.Open(sst_name_));
-	for (size_t i = 0; i < keys.size(); i ++) {
-		ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
-	}
-	ASSERT_OK(writer.Finish());
 
 	ReadOptions ropts;
     SstFileFilterReader reader(options_);
@@ -131,19 +164,34 @@ class SstFileFilterReaderTest : public testing::Test {
     std::vector<int> values;
     std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
     begin = clock();
-    iter->SeekToFirst();
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    	iter->Valid();
-    	//values.emplace_back(__args)
     	values.emplace_back(atoi(iter->value().data()));
     }
     end = clock();
     gbegin = clock();
 	ruda::sstIntFilter(values, ctx, results);
 	gend = clock();
-	std::cout << " CPU time in GPU test : " << end-begin << std::endl;
-	std::cout << " GPU time in GPU test : " << gend-gbegin << std::endl;
+
+/*	std::cout << " Properties(1) = " << reader.GetTableProperties().get()->data_size << std::endl;
+	std::cout << " Properties(2) = " << reader.GetTableProperties().get()->fixed_key_len << std::endl;
+	std::cout << " Properties(3) = " << reader.GetTableProperties().get()->index_size << std::endl;
+    std::cout << " Properties(4) = " << reader.GetTableProperties().get()->num_data_blocks << std::endl;
+	std::cout << " Properties(5) = " << reader.GetTableProperties().get()->raw_key_size << std::endl;
+	std::cout << " Properties(6) = " << reader.GetTableProperties().get()->raw_value_size << std::endl; */
+
+	std::cout << " [size: "<< results.size() << "]" << std::endl;
+	std::cout << " CPU iteration time in GPU test(s) : " << (end-begin) / CLOCKS_PER_SEC << std::endl;
+	std::cout << " GPU filter time in GPU test(s) : " << (gend-gbegin) / CLOCKS_PER_SEC  << std::endl;
   }
+
+//  virtual void SetUp() {
+//	const uint64_t kNumKeys = 100000;
+//	std::vector<std::string> keys;
+//	for (uint64_t i = 0; i < kNumKeys; i++) {
+//		keys.emplace_back(EncodeAsUint64(i));
+//	}
+//	FileWrite(keys);
+//  }
 
  protected:
   Options options_;
@@ -151,11 +199,12 @@ class SstFileFilterReaderTest : public testing::Test {
   std::string sst_name_;
 };
 
-const uint64_t kNumKeys = 1000000;
+const uint64_t kNumKeys = 1000000000;
 
+// Basic Test
 //TEST_F(SstFileFilterReaderTest, Basic) {
 //  std::vector<std::string> keys;
-//  for (uint64_t i = 0; i < kNumKeys; i++) {
+//  for (uint64_t i = 0; i < 100000; i++) {
 //    keys.emplace_back(EncodeAsString(i));
 //  }
 //  CreateFileAndCheck(keys);
@@ -164,44 +213,35 @@ const uint64_t kNumKeys = 1000000;
 //TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 //  options_.comparator = test::Uint64Comparator();
 //  std::vector<std::string> keys;
-//  for (uint64_t i = 0; i < kNumKeys; i++) {
+//  for (uint64_t i = 0; i < 1000000; i++) {
 //    keys.emplace_back(EncodeAsUint64(i));
 //  }
 //  CreateFileAndCheck(keys);
 //}
 
-TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
-  options_.comparator = test::Uint64Comparator();
-  std::vector<std::string> keys;
-  for (uint64_t i = 0; i < kNumKeys; i++) {
-	keys.emplace_back(EncodeAsUint64(i));
-  }
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<int> results;
-  FilterWithCPU(keys, ctx, results);
-
-//  std::cout << "[CPU_FILTER_TEST] Results" << std::endl;
-//  for (unsigned int i = 0; i < results.size(); ++i) {
-//    std::cout << results[i] << " ";
-//  }
-//  std::cout << std::endl;
-}
-
-TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
+TEST_F(SstFileFilterReaderTest, FileWrite) {
   options_.comparator = test::Uint64Comparator();
   std::vector<std::string> keys;
   for (uint64_t i = 0; i < kNumKeys; i++) {
     keys.emplace_back(EncodeAsUint64(i));
   }
+  FileWrite(keys);
+}
+
+TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
+  options_.comparator = test::Uint64Comparator();
   ruda::ConditionContext ctx = { ruda::EQ, 5,};
   std::vector<int> results;
-  FilterWithGPU(keys, ctx, results);
+  FilterWithCPU(ctx, results);
 
-//  std::cout << "[GPU_FILTER_TEST] Results" << std::endl;
-//  for (unsigned int i = 0; i < results.size(); ++i) {
-//    std::cout << results[i] << " ";
-//  }
-//  std::cout << std::endl;
+}
+
+TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
+  options_.comparator = test::Uint64Comparator();
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<int> results;
+  FilterWithGPU(ctx, results);
+
 }
 
 }  // namespace rocksdb

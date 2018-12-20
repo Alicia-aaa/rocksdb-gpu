@@ -77,4 +77,23 @@ int sstIntFilter(const std::vector<int>& values,
   return ruda::RUDA_OK;
 }
 
+int sstChunkFilter(const std::vector<int>& values,
+                 const ConditionContext context,
+                 std::vector<int>& results) {
+
+  results.resize(values.size());
+
+  thrust::device_vector<int> d_values(values);
+  thrust::device_vector<int> d_results(values.size());
+
+  RudaIntTransformator rudaTrans(context);
+  thrust::transform(d_values.begin(), d_values.end(), d_results.begin(),
+                    rudaTrans);
+
+  thrust::copy(d_results.begin(), d_results.end(), results.begin());
+
+
+  return ruda::RUDA_OK;
+}
+
 }  // namespace ruda

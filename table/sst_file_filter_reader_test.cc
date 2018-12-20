@@ -83,7 +83,8 @@ class SstFileFilterReaderTest : public testing::Test {
   SstFileFilterReaderTest() {
     options_.merge_operator = MergeOperators::CreateUInt64AddOperator();
     //sst_name_ = test::PerThreadDBPath("sst_file");
-    sst_name_ = "sst_file_for_filter_read";
+    sst_name_ = "sst_testfile_1";
+    sst_name_second_ = "sst_testfile_2";
   }
 
   void CreateFileAndCheck(const std::vector<std::string>& keys) {
@@ -115,13 +116,32 @@ class SstFileFilterReaderTest : public testing::Test {
     ASSERT_FALSE(iter->Valid());
   }
 
-  void FileWrite(std::vector<std::string> &keys) {
+  void FileWrite(uint64_t kNumKeys) {
 	  SstFileWriter writer(soptions_, options_);
 	  srand((unsigned int)time(NULL));
 	  ASSERT_OK(writer.Open(sst_name_));
-	  for (size_t i = 0; i < keys.size(); i ++) {
-	  	ASSERT_OK(writer.Put(keys[i], EncodeAsUint64(rand() % 100)));
-//		  	ASSERT_OK(writer.Put(keys[i], keys[i]));
+	  for (size_t i = 0; i < kNumKeys; i ++) {
+	  	ASSERT_OK(writer.Put(EncodeAsUint64(i), EncodeAsUint64(rand() % 100)));
+	  }
+	  ASSERT_OK(writer.Finish());
+  }
+
+  void FileWriteVector(uint64_t kNumKeys) {
+	  SstFileWriter writer(soptions_, options_);
+	  srand((unsigned int)time(NULL));
+	  ASSERT_OK(writer.Open(sst_name_second_));
+	  uint64_t index = 0;
+	  std::vector<int> temp;
+	  for (size_t i = 0; i < kNumKeys; i ++) {
+		temp.emplace_back(rand() % 100000);
+		if (i % 999999 == 0) {
+	    	ASSERT_OK(writer.Put(EncodeAsUint64(index), serializeVector(temp)));
+	    	index++;
+	    	temp.clear();
+		}
+		if (i == kNumKeys - 1) {
+	        ASSERT_OK(writer.Put(EncodeAsUint64(index), serializeVector(temp)));
+		}
 	  }
 	  ASSERT_OK(writer.Finish());
   }
@@ -154,6 +174,30 @@ class SstFileFilterReaderTest : public testing::Test {
 
   }
 
+  void FilterWithCPUVector(ruda::ConditionContext ctx, std::vector<int> &results) {
+	clock_t begin, end;
+
+	ReadOptions ropts;
+    SstFileFilterReader reader(options_);
+    reader.Open(sst_name_second_);
+    reader.VerifyChecksum();
+
+    std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+    begin = clock();
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      std::vector<int> temp_values = deserializeVector(iter->value().data());
+      for(unsigned int j = 0 ; j < temp_values.size(); j++) {
+    	  results.emplace_back(filterPredicateCPU(temp_values[j], ctx));
+      }
+    }
+    end = clock();
+
+    std::cout << " [size : " << results.size() << "]" << std::endl;
+    std::cout << " CPU Vector time in CPU test(s) : " << (end - begin) / CLOCKS_PER_SEC << std::endl;
+
+
+  }
+
   void FilterWithGPU(ruda::ConditionContext ctx, std::vector<int> &results) {
 	clock_t begin, end, gbegin, gend;
 
@@ -172,6 +216,28 @@ class SstFileFilterReaderTest : public testing::Test {
 	ruda::sstIntFilter(values, ctx, results);
 	gend = clock();
 
+	std::cout << " [size: "<< results.size() << "]" << std::endl;
+	std::cout << " CPU iteration time in GPU test(s) : " << (end-begin) / CLOCKS_PER_SEC << std::endl;
+	std::cout << " GPU filter time in GPU test(s) : " << (gend-gbegin) / CLOCKS_PER_SEC  << std::endl;
+  }
+
+  void FilterWithGPUVector(ruda::ConditionContext ctx, std::vector<int> &results) {
+	clock_t begin, end;
+
+	ReadOptions ropts;
+    SstFileFilterReader reader(options_);
+    reader.Open(sst_name_second_);
+    reader.VerifyChecksum();
+    std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+    begin = clock();
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    	std::vector<int> temp_values = deserializeVector(iter->value().data());
+        std::vector<int> temp_results;
+    	ruda::sstIntFilter(temp_values, ctx, temp_results);
+    	results.insert(results.end(), temp_results.begin(), temp_results.end());
+    }
+    end = clock();
+
 /*	std::cout << " Properties(1) = " << reader.GetTableProperties().get()->data_size << std::endl;
 	std::cout << " Properties(2) = " << reader.GetTableProperties().get()->fixed_key_len << std::endl;
 	std::cout << " Properties(3) = " << reader.GetTableProperties().get()->index_size << std::endl;
@@ -180,53 +246,42 @@ class SstFileFilterReaderTest : public testing::Test {
 	std::cout << " Properties(6) = " << reader.GetTableProperties().get()->raw_value_size << std::endl; */
 
 	std::cout << " [size: "<< results.size() << "]" << std::endl;
-	std::cout << " CPU iteration time in GPU test(s) : " << (end-begin) / CLOCKS_PER_SEC << std::endl;
-	std::cout << " GPU filter time in GPU test(s) : " << (gend-gbegin) / CLOCKS_PER_SEC  << std::endl;
+	std::cout << " GPU Vector time in GPU test(s) : " << (end-begin) / CLOCKS_PER_SEC << std::endl;
+
   }
 
-//  virtual void SetUp() {
-//	const uint64_t kNumKeys = 100000;
-//	std::vector<std::string> keys;
-//	for (uint64_t i = 0; i < kNumKeys; i++) {
-//		keys.emplace_back(EncodeAsUint64(i));
-//	}
-//	FileWrite(keys);
-//  }
+  virtual void SetUp() {
+	options_.comparator = test::Uint64Comparator();
+	uint64_t kNumKeys = 1000000000;
+	FileWrite(kNumKeys);
+	FileWriteVector(kNumKeys);
+  }
 
  protected:
   Options options_;
   EnvOptions soptions_;
   std::string sst_name_;
+  std::string sst_name_second_;
 };
 
-const uint64_t kNumKeys = 1000000000;
+/* Basic Test
+TEST_F(SstFileFilterReaderTest, Basic) {
+  std::vector<std::string> keys;
+  for (uint64_t i = 0; i < 100000; i++) {
+    keys.emplace_back(EncodeAsString(i));
+  }
+  CreateFileAndCheck(keys);
+}
 
-// Basic Test
-//TEST_F(SstFileFilterReaderTest, Basic) {
-//  std::vector<std::string> keys;
-//  for (uint64_t i = 0; i < 100000; i++) {
-//    keys.emplace_back(EncodeAsString(i));
-//  }
-//  CreateFileAndCheck(keys);
-//}
-//
-//TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
-//  options_.comparator = test::Uint64Comparator();
-//  std::vector<std::string> keys;
-//  for (uint64_t i = 0; i < 1000000; i++) {
-//    keys.emplace_back(EncodeAsUint64(i));
-//  }
-//  CreateFileAndCheck(keys);
-//}
-
-TEST_F(SstFileFilterReaderTest, FileWrite) {
+TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   options_.comparator = test::Uint64Comparator();
   std::vector<std::string> keys;
-  for (uint64_t i = 0; i < kNumKeys; i++) {
+  for (uint64_t i = 0; i < 1000000; i++) {
     keys.emplace_back(EncodeAsUint64(i));
   }
-  FileWrite(keys);
-}
+  CreateFileAndCheck(keys);
+} */
+
 
 TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
   options_.comparator = test::Uint64Comparator();
@@ -236,11 +291,27 @@ TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
 
 }
 
+TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
+  options_.comparator = test::Uint64Comparator();
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<int> results;
+  FilterWithCPUVector(ctx, results);
+
+}
+
 TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
   options_.comparator = test::Uint64Comparator();
   ruda::ConditionContext ctx = { ruda::EQ, 5,};
   std::vector<int> results;
   FilterWithGPU(ctx, results);
+
+}
+
+TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
+  options_.comparator = test::Uint64Comparator();
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<int> results;
+  FilterWithGPUVector(ctx, results);
 
 }
 

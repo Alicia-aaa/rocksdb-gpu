@@ -46,5 +46,8 @@ int sstChunkFilter(const char * values,
                  const ConditionContext context,
                  char * results);
 
+int sstIntNativeFilter(const std::vector<int>& values,
+                       const ConditionContext context,
+                       std::vector<int>& results);
 }  // namespace ruda
 #endif

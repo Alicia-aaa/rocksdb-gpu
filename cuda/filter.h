@@ -38,16 +38,17 @@ struct ConditionContext {
   }
 };
 
-int sstIntFilter(const std::vector<int>& values,
+int sstIntFilter(const std::vector<int> &values,
                  const ConditionContext context,
-                 std::vector<int>& results);
+                 std::vector<int> &results);
 
-int sstChunkFilter(const char * values,
-                 const ConditionContext context,
-                 char * results);
+// Note: Not Implemented.
+int sstChunkFilter(const char *values,
+                   const ConditionContext context,
+                   char *results);
 
-int sstIntNativeFilter(const std::vector<int>& values,
+int sstIntNativeFilter(const std::vector<int> &values,
                        const ConditionContext context,
-                       std::vector<int>& results);
+                       std::vector<int> &results);
 }  // namespace ruda
 #endif

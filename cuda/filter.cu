@@ -1,4 +1,5 @@
 #include "filter.h"
+#include "table/format.h"
 
 #include <stdio.h>
 #include <iostream>
@@ -66,6 +67,7 @@ void rudaIntFilterKernel(ConditionContext *context, int *values,
 int sstIntFilter(const std::vector<int> &values,
                  const ConditionContext context,
                  std::vector<int> &results) {
+  rocksdb::BlockContents block;
   // std::cout << "[RUDA][sstIntFilter] Start" << std::endl;
   results.resize(values.size());
 

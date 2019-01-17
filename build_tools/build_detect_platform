@@ -48,6 +48,11 @@ PLATFORM_CXXFLAGS="-std=c++11"
 # we currently depend on POSIX platform
 COMMON_FLAGS="-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX"
 
+# RocksDB-GPU
+PLATFORM_NVCCFLAGS="-std=c++11"
+COMMON_NVCCFLAGS="-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX"
+XCOMPILER_NVCCFLAGS=""
+
 # Default to fbcode gcc on internal fb machines
 if [ -z "$ROCKSDB_NO_FBCODE" -a -d /mnt/gvfs/third-party ]; then
     FBCODE_BUILD="true"
@@ -137,6 +142,8 @@ case "$TARGET_OS" in
     Darwin)
         PLATFORM=OS_MACOSX
         COMMON_FLAGS="$COMMON_FLAGS -DOS_MACOSX"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DOS_MACOSX"
         PLATFORM_SHARED_EXT=dylib
         PLATFORM_SHARED_LDFLAGS="-dynamiclib -install_name "
         # PORT_FILES=port/darwin/darwin_specific.cc
@@ -144,6 +151,8 @@ case "$TARGET_OS" in
     IOS)
         PLATFORM=IOS
         COMMON_FLAGS="$COMMON_FLAGS -DOS_MACOSX -DIOS_CROSS_COMPILE -DROCKSDB_LITE"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DOS_MACOSX -DIOS_CROSS_COMPILE -DROCKSDB_LITE"
         PLATFORM_SHARED_EXT=dylib
         PLATFORM_SHARED_LDFLAGS="-dynamiclib -install_name "
         CROSS_COMPILE=true
@@ -152,8 +161,12 @@ case "$TARGET_OS" in
     Linux)
         PLATFORM=OS_LINUX
         COMMON_FLAGS="$COMMON_FLAGS -DOS_LINUX"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DOS_LINUX"
         if [ -z "$USE_CLANG" ]; then
             COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp"
+            # RocksDB-GPU
+            XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         else
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -latomic"
         fi
@@ -163,6 +176,9 @@ case "$TARGET_OS" in
     SunOS)
         PLATFORM=OS_SOLARIS
         COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_SOLARIS -m64"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_SOLARIS"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp -m64"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread -lrt -static-libstdc++ -static-libgcc -m64"
         # PORT_FILES=port/sunos/sunos_specific.cc
         ;;
@@ -170,6 +186,9 @@ case "$TARGET_OS" in
         PLATFORM=OS_AIX
         CC=gcc
         COMMON_FLAGS="$COMMON_FLAGS -maix64 -pthread -fno-builtin-memcmp -D_REENTRANT -DOS_AIX -D__STDC_FORMAT_MACROS"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_AIX -D__STDC_FORMAT_MACROS"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -maix64 -pthread -fno-builtin-memcmp"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -pthread -lpthread -lrt -maix64 -static-libstdc++ -static-libgcc"
         # PORT_FILES=port/aix/aix_specific.cc
         ;;
@@ -177,12 +196,18 @@ case "$TARGET_OS" in
         PLATFORM=OS_FREEBSD
         CXX=clang++
         COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_FREEBSD"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_FREEBSD"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread"
         # PORT_FILES=port/freebsd/freebsd_specific.cc
         ;;
     NetBSD)
         PLATFORM=OS_NETBSD
         COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_NETBSD"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_NETBSD"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread -lgcc_s"
         # PORT_FILES=port/netbsd/netbsd_specific.cc
         ;;
@@ -190,6 +215,9 @@ case "$TARGET_OS" in
         PLATFORM=OS_OPENBSD
 	CXX=clang++
         COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_OPENBSD"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_OPENBSD"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -pthread"
         # PORT_FILES=port/openbsd/openbsd_specific.cc
 	FIND=gfind
@@ -198,6 +226,9 @@ case "$TARGET_OS" in
     DragonFly)
         PLATFORM=OS_DRAGONFLYBSD
         COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_DRAGONFLYBSD"
+        # RocksDB-GPU
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_DRAGONFLYBSD"
+        XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread"
         # PORT_FILES=port/dragonfly/dragonfly_specific.cc
         ;;
@@ -205,9 +236,13 @@ case "$TARGET_OS" in
         PLATFORM=CYGWIN
         PLATFORM_SHARED_CFLAGS=""
         PLATFORM_CXXFLAGS="-std=gnu++11"
+        PLATFORM_NVCCFLAGS="-std=gnu++11"
         COMMON_FLAGS="$COMMON_FLAGS -DCYGWIN"
+        COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DCYGWIN"
         if [ -z "$USE_CLANG" ]; then
             COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp"
+            # RocksDB-GPU
+            XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
         else
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -latomic"
         fi
@@ -217,6 +252,9 @@ case "$TARGET_OS" in
     OS_ANDROID_CROSSCOMPILE)
         PLATFORM=OS_ANDROID
 	COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp -D_REENTRANT -DOS_ANDROID -DROCKSDB_PLATFORM_POSIX"
+    # RocksDB-GPU
+    COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -D_REENTRANT -DOS_ANDROID -DROCKSDB_PLATFORM_POSIX"
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -fno-builtin-memcmp"
 	PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS "  # All pthread features are in the Android C library
         # PORT_FILES=port/android/android.cc
         CROSS_COMPILE=true
@@ -227,6 +265,8 @@ case "$TARGET_OS" in
 esac
 
 PLATFORM_CXXFLAGS="$PLATFORM_CXXFLAGS ${CXXFLAGS}"
+# RocksDB-GPU
+PLATFORM_NVCCFLAGS="$PLATFORM_NVCCFLAGS ${NVCCFLAGS}"
 JAVA_LDFLAGS="$PLATFORM_LDFLAGS"
 JAVA_STATIC_LDFLAGS="$PLATFORM_LDFLAGS"
 
@@ -247,6 +287,8 @@ else
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_FALLOCATE_PRESENT"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_FALLOCATE_PRESENT"
         fi
     fi
 
@@ -259,6 +301,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DSNAPPY"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DSNAPPY"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lsnappy"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -lsnappy"
         fi
@@ -274,6 +318,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DGFLAGS=1"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DGFLAGS=1"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lgflags"
         else
           # check if namespace is google
@@ -284,6 +330,8 @@ EOF
 EOF
           if [ "$?" = 0 ]; then
               COMMON_FLAGS="$COMMON_FLAGS -DGFLAGS=google"
+              # RocksDB-GPU
+              COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DGFLAGS=google"
               PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lgflags"
           fi
         fi
@@ -297,6 +345,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DZLIB"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DZLIB"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lz"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -lz"
         fi
@@ -310,6 +360,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DBZIP2"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DBZIP2"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lbz2"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -lbz2"
         fi
@@ -324,6 +376,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DLZ4"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DLZ4"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -llz4"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -llz4"
         fi
@@ -337,6 +391,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DZSTD"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DZSTD"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lzstd"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -lzstd"
         fi
@@ -351,6 +407,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DNUMA"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DNUMA"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lnuma"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -lnuma"
         fi
@@ -364,6 +422,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DTBB"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DTBB"
             PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -ltbb"
             JAVA_LDFLAGS="$JAVA_LDFLAGS -ltbb"
         fi
@@ -400,6 +460,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_MALLOC_USABLE_SIZE"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_MALLOC_USABLE_SIZE"
         fi
     fi
 
@@ -414,6 +476,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_PTHREAD_ADAPTIVE_MUTEX"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_PTHREAD_ADAPTIVE_MUTEX"
         fi
     fi
 
@@ -429,6 +493,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_BACKTRACE"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_BACKTRACE"
         else
             # Test whether execinfo library is installed
             $CXX $CFLAGS -lexecinfo -x c++ - -o /dev/null 2>/dev/null  <<EOF
@@ -440,6 +506,8 @@ EOF
 EOF
             if [ "$?" = 0 ]; then
                 COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_BACKTRACE"
+                # RocksDB-GPU
+                COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_BACKTRACE"
                 PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lexecinfo"
                 JAVA_LDFLAGS="$JAVA_LDFLAGS -lexecinfo"
             fi
@@ -469,6 +537,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_RANGESYNC_PRESENT"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_RANGESYNC_PRESENT"
         fi
     fi
 
@@ -482,6 +552,8 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_SCHED_GETCPU_PRESENT"
+            # RocksDB-GPU
+            COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_SCHED_GETCPU_PRESENT"
         fi
     fi
 
@@ -493,6 +565,9 @@ EOF
 EOF
         if [ "$?" = 0 ]; then
             PLATFORM_CXXFLAGS="$PLATFORM_CXXFLAGS -faligned-new -DHAVE_ALIGNED_NEW"
+            # RocksDB-GPU
+            PLATFORM_NVCCFLAGS="$PLATFORM_NVCCFLAGS -DHAVE_ALIGNED_NEW"
+            XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -faligned-new"
         fi
     fi
 fi
@@ -506,6 +581,8 @@ if ! [ "$TARGET_OS" = FreeBSD -a "$TARGET_ARCHITECTURE" = i386 ]; then
 EOF
   if [ "$?" = 0 ]; then
     COMMON_FLAGS="$COMMON_FLAGS -Wshorten-64-to-32"
+    # RocksDB-GPU
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -Wshorten-64-to-32"
   fi
 fi
 
@@ -521,6 +598,7 @@ if test "$USE_HDFS"; then
   HDFS_LDFLAGS="$HDFS_LDFLAGS -L$JAVA_HOME/jre/lib/amd64/server -L$GLIBC_RUNTIME_PATH/lib"
   HDFS_LDFLAGS="$HDFS_LDFLAGS -ldl -lverify -ljava -ljvm"
   COMMON_FLAGS="$COMMON_FLAGS $HDFS_CCFLAGS"
+  COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS $HDFS_CCFLAGS"
   PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS $HDFS_LDFLAGS"
   JAVA_LDFLAGS="$JAVA_LDFLAGS $HDFS_LDFLAGS"
 fi
@@ -530,8 +608,12 @@ if test -z "$PORTABLE"; then
     # Tune for this POWER processor, treating '+' models as base models
     POWER=`LD_SHOW_AUXV=1 /bin/true | grep AT_PLATFORM | grep -E -o power[0-9]+`
     COMMON_FLAGS="$COMMON_FLAGS -mcpu=$POWER -mtune=$POWER "
+    # RocksDB-GPU
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -mcpu=$POWER -mtune=$POWER "
   elif test -n "`echo $TARGET_ARCHITECTURE | grep ^s390x`"; then
     COMMON_FLAGS="$COMMON_FLAGS -march=z10 "
+    # RocksDB-GPU
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -march=z10 "
   elif test -n "`echo $TARGET_ARCHITECTURE | grep ^arm`"; then
     # TODO: Handle this with approprite options.
     COMMON_FLAGS="$COMMON_FLAGS"
@@ -539,11 +621,17 @@ if test -z "$PORTABLE"; then
     COMMON_FLAGS="$COMMON_FLAGS"
   elif [ "$TARGET_OS" != "AIX" ] && [ "$TARGET_OS" != "SunOS" ]; then
     COMMON_FLAGS="$COMMON_FLAGS -march=native "
+    # RocksDB-GPU
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -march=native "
   elif test "$USE_SSE"; then
     COMMON_FLAGS="$COMMON_FLAGS -msse4.2 -mpclmul"
+    # RocksDB-GPU
+    XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -msse4.2 -mpclmul"
   fi
 elif test "$USE_SSE"; then
   COMMON_FLAGS="$COMMON_FLAGS -msse4.2 -mpclmul"
+  # RocksDB-GPU
+  XCOMPILER_NVCCFLAGS="$XCOMPILER_NVCCFLAGS -msse4.2 -mpclmul"
 fi
 
 $CXX $PLATFORM_CXXFLAGS $COMMON_FLAGS -x c++ - -o /dev/null 2>/dev/null <<EOF
@@ -555,6 +643,8 @@ $CXX $PLATFORM_CXXFLAGS $COMMON_FLAGS -x c++ - -o /dev/null 2>/dev/null <<EOF
 EOF
 if [ "$?" = 0 ]; then
   COMMON_FLAGS="$COMMON_FLAGS -DHAVE_SSE42"
+  # RocksDB-GPU
+  COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DHAVE_SSE42"
 elif test "$USE_SSE"; then
   echo "warning: USE_SSE specified but compiler could not use SSE intrinsics, disabling"
   exit 1
@@ -572,6 +662,8 @@ $CXX $PLATFORM_CXXFLAGS $COMMON_FLAGS -x c++ - -o /dev/null 2>/dev/null <<EOF
 EOF
 if [ "$?" = 0 ]; then
   COMMON_FLAGS="$COMMON_FLAGS -DHAVE_PCLMUL"
+  # RocksDB-GPU
+  COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DHAVE_PCLMUL"
 elif test "$USE_SSE"; then
   echo "warning: USE_SSE specified but compiler could not use PCLMUL intrinsics, disabling"
   exit 1
@@ -591,11 +683,15 @@ if [ "$PLATFORM" != IOS ]; then
 EOF
   if [ "$?" = 0 ]; then
     COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_SUPPORT_THREAD_LOCAL"
+    # RocksDB-GPU
+    COMMON_NVCCFLAGS="$COMMON_NVCCFLAGS -DROCKSDB_SUPPORT_THREAD_LOCAL"
   fi
 fi
 
 PLATFORM_CCFLAGS="$PLATFORM_CCFLAGS $COMMON_FLAGS"
 PLATFORM_CXXFLAGS="$PLATFORM_CXXFLAGS $COMMON_FLAGS"
+# RocksDB-GPU
+PLATFORM_NVCCFLAGS="$PLATFORM_NVCCFLAGS $COMMON_NVCCFLAGS"
 
 VALGRIND_VER="$VALGRIND_VER"
 
@@ -615,6 +711,8 @@ echo "JAVA_STATIC_LDFLAGS=$JAVA_STATIC_LDFLAGS" >> "$OUTPUT"
 echo "VALGRIND_VER=$VALGRIND_VER" >> "$OUTPUT"
 echo "PLATFORM_CCFLAGS=$PLATFORM_CCFLAGS" >> "$OUTPUT"
 echo "PLATFORM_CXXFLAGS=$PLATFORM_CXXFLAGS" >> "$OUTPUT"
+echo "PLATFORM_NVCCFLAGS=$PLATFORM_NVCCFLAGS" >> "$OUTPUT"
+echo "XCOMPILER_NVCCFLAGS=$XCOMPILER_NVCCFLAGS" >> "$OUTPUT"
 echo "PLATFORM_SHARED_CFLAGS=$PLATFORM_SHARED_CFLAGS" >> "$OUTPUT"
 echo "PLATFORM_SHARED_EXT=$PLATFORM_SHARED_EXT" >> "$OUTPUT"
 echo "PLATFORM_SHARED_LDFLAGS=$PLATFORM_SHARED_LDFLAGS" >> "$OUTPUT"

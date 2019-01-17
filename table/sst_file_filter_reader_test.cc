@@ -11,6 +11,7 @@
 #include <ctime>
 #include <time.h>
 
+#include "cuda/filter.h"
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
 #include "util/testharness.h"

@@ -1,6 +1,12 @@
 
-#ifndef __FILTER_HEADER__
-#define __FILTER_HEADER__
+/*
+ * filter.h
+ *
+ *  Created on: Dec 10, 2018
+ *      Author: totoro
+ */
+
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -51,4 +57,3 @@ int sstIntNativeFilter(const std::vector<int> &values,
                        const ConditionContext context,
                        std::vector<int> &results);
 }  // namespace ruda
-#endif

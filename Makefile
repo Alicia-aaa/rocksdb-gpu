@@ -22,12 +22,15 @@ STRIPFLAGS = -S -x
 NVCCFLAGS += $(EXTRA_NVCCFLAGS)
 
 # RocksDB-GPU
+CUDA_PATH = /usr/local/cuda
+
+# RocksDB-GPU
 # Needs to add '.cu' suffix to SUFFIXES explicitly...
 .SUFFIXES: .c .S .cc .cu .o
 
 # RocksDB-GPU
 # CUDA_LDFLAGS for appending LDFLAGS
-CUDA_LDFLAGS = -L/usr/local/cuda/lib64 -lcudart
+CUDA_LDFLAGS = -L$(CUDA_PATH)/lib64 -lcudart
 
 # Transform parallel LOG output into something more readable.
 perl_command = perl -n \
@@ -246,6 +249,8 @@ endif
 
 ifeq ($(PLATFORM), OS_SOLARIS)
 	PLATFORM_CXXFLAGS += -D _GLIBCXX_USE_C99
+	# RocksDB-GPU
+	PLATFORM_NVCCFLAGS += -D _GLIBCXX_USE_C99
 endif
 ifneq ($(filter -DROCKSDB_LITE,$(OPT)),)
 	# found
@@ -261,6 +266,8 @@ ifdef COMPILE_WITH_ASAN
 	EXEC_LDFLAGS += -fsanitize=address
 	PLATFORM_CCFLAGS += -fsanitize=address
 	PLATFORM_CXXFLAGS += -fsanitize=address
+	# RocksDB-GPU
+	XCOMPILER_NVCCFLAGS += -fsanitize=address
 endif
 
 # TSAN doesn't work well with jemalloc. If we're compiling with TSAN, we should use regular malloc.
@@ -269,6 +276,8 @@ ifdef COMPILE_WITH_TSAN
 	EXEC_LDFLAGS += -fsanitize=thread
 	PLATFORM_CCFLAGS += -fsanitize=thread -fPIC
 	PLATFORM_CXXFLAGS += -fsanitize=thread -fPIC
+	# RocksDB-GPU
+	XCOMPILER_NVCCFLAGS += -fsanitize=thread -fPIC
         # Turn off -pg when enabling TSAN testing, because that induces
         # a link failure.  TODO: find the root cause
 	PROFILING_FLAGS =
@@ -294,17 +303,23 @@ ifdef COMPILE_WITH_UBSAN
 	EXEC_LDFLAGS += -fsanitize=undefined -fno-sanitize-recover=all
 	PLATFORM_CCFLAGS += -fsanitize=undefined -fno-sanitize-recover=all -DROCKSDB_UBSAN_RUN
 	PLATFORM_CXXFLAGS += -fsanitize=undefined -fno-sanitize-recover=all -DROCKSDB_UBSAN_RUN
+	# RocksDB-GPU
+	XCOMPILER_NVCCFLAGS += -fsanitize=undefined -fno-sanitize-recover=all -DROCKSDB_UBSAN_RUN
 endif
 
 ifdef ROCKSDB_VALGRIND_RUN
 	PLATFORM_CCFLAGS += -DROCKSDB_VALGRIND_RUN
 	PLATFORM_CXXFLAGS += -DROCKSDB_VALGRIND_RUN
+	# RocksDB-GPU
+	PLATFORM_NVCCFLAGS += -DROCKSDB_VALGRIND_RUN
 endif
 
 ifndef DISABLE_JEMALLOC
 	ifdef JEMALLOC
 		PLATFORM_CXXFLAGS += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
 		PLATFORM_CCFLAGS  += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
+		# RocksDB-GPU
+		PLATFORM_NVCCFLAGS += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
 	endif
 	ifdef WITH_JEMALLOC_FLAG
 		PLATFORM_LDFLAGS += -ljemalloc
@@ -313,6 +328,8 @@ ifndef DISABLE_JEMALLOC
 	EXEC_LDFLAGS := $(JEMALLOC_LIB) $(EXEC_LDFLAGS)
 	PLATFORM_CXXFLAGS += $(JEMALLOC_INCLUDE)
 	PLATFORM_CCFLAGS += $(JEMALLOC_INCLUDE)
+	# RocksDB-GPU
+	PLATFORM_NVCCFLAGS += $(JEMALLOC_INCLUDE)
 endif
 
 export GTEST_THROW_ON_FAILURE=1
@@ -322,9 +339,13 @@ GTEST_DIR = ./third-party/gtest-1.7.0/fused-src
 ifeq ($(PLATFORM), OS_AIX)
 	PLATFORM_CCFLAGS += -I$(GTEST_DIR)
 	PLATFORM_CXXFLAGS += -I$(GTEST_DIR)
+	# RocksDB-GPU
+	PLATFORM_NVCCFLAGS += -I$(GTEST_DIR)
 else
 	PLATFORM_CCFLAGS += -isystem $(GTEST_DIR)
 	PLATFORM_CXXFLAGS += -isystem $(GTEST_DIR)
+	# RocksDB-GPU
+	PLATFORM_NVCCFLAGS += -isystem $(GTEST_DIR)
 endif
 
 # This (the first rule) must depend on "all".
@@ -374,6 +395,14 @@ endif
 
 CFLAGS += $(WARNING_FLAGS) -I. -I./include $(PLATFORM_CCFLAGS) $(OPT)
 CXXFLAGS += $(WARNING_FLAGS) -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -Woverloaded-virtual -Wnon-virtual-dtor -Wno-missing-field-initializers
+# RocksDB-GPU
+# PLATFORM_NVCCFLAGS: Compile options that is avaiable for nvcc.
+# XCOMPILER_NVCCFLAGS: Compile options that is not available for nvcc.
+#											 So, we inject these options by 'Xcompiler' option.
+#											 Also, we excepted 'WARNING_FLAGS' on 'Xcompiler' because
+#											 there are illegal code style error on cuda API.
+NVCCFLAGS += -I. -I./include $(PLATFORM_NVCCFLAGS) \
+	-Xcompiler "$(XCOMPILER_NVCCFLAGS) $(OPT) -Woverloaded-virtual -Wnon-virtual-dtor -Wno-missing-field-initializers"
 
 LDFLAGS += $(PLATFORM_LDFLAGS)
 
@@ -2017,9 +2046,7 @@ endif
 
 all_sources = $(LIB_SOURCES) $(MAIN_SOURCES) $(MOCK_LIB_SOURCES) $(TOOL_LIB_SOURCES) $(BENCH_LIB_SOURCES) $(TEST_LIB_SOURCES) $(EXP_LIB_SOURCES) $(ANALYZER_LIB_SOURCES)
 DEPFILES = $(all_sources:.cc=.cc.d)
-
-# RocksDB-GPU
-# TODO(totoro): Adds dependency support for CUDA-related sources...
+CUDA_DEPFILES = $(CUDA_SOURCES:.cu=.cu.d)
 
 # Add proper dependency support so changing a .h file forces a .cc file to
 # rebuild.
@@ -2029,6 +2056,11 @@ DEPFILES = $(all_sources:.cc=.cc.d)
 %.cc.d: %.cc
 	@$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) \
 	  -MM -MT'$@' -MT'$(<:.cc=.o)' "$<" -o '$@'
+
+%.cu.d: %.cu
+	@$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) \
+		-x c++ -I$(CUDA_PATH) \
+		-MM -MT'$@' -MT'$(<:.cu=.o)' "$<" -o '$@'
 
 ifeq ($(HAVE_POWER8),1)
 DEPFILES_C = $(LIB_SOURCES_C:.c=.c.d)
@@ -2061,6 +2093,7 @@ ifneq ($(MAKECMDGOALS),jtest)
 ifneq ($(MAKECMDGOALS),package)
 ifneq ($(MAKECMDGOALS),analyze)
 -include $(DEPFILES)
+-include $(CUDA_DEPFILES)
 endif
 endif
 endif

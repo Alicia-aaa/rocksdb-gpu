@@ -45,6 +45,13 @@ class TableReader {
                                         bool skip_filters = false,
                                         bool for_compaction = false) = 0;
 
+  // RUDA
+  // Returns all DataBlocks on SST file.
+  virtual Status GetDataBlocks(const ReadOptions&,
+                               std::vector<Slice>& /* blocks */) {
+    return Status();
+  };
+
   virtual FragmentedRangeTombstoneIterator* NewRangeTombstoneIterator(
       const ReadOptions& /*read_options*/) {
     return nullptr;

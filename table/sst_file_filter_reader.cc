@@ -86,6 +86,12 @@ Status SstFileFilterReader::BulkReturn(const std::string& file_path, char * scra
   return s;
 }
 
+Status SstFileFilterReader::GetDataBlocks(const ReadOptions& options,
+                                          std::vector<Slice>& blocks) {
+  auto r = rep_.get();
+  return r->table_reader->GetDataBlocks(options, blocks);
+}
+
 Iterator* SstFileFilterReader::NewIterator(const ReadOptions& options) {
   auto r = rep_.get();
   auto sequence = options.snapshot != nullptr ?

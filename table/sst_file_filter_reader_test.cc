@@ -250,9 +250,28 @@ class SstFileFilterReaderTest : public testing::Test {
 
   }
 
+  void GetDataBlocks(std::vector<Slice>& blocks) {
+    ReadOptions ropts;
+    SstFileFilterReader reader(options_);
+    reader.Open(sst_name_);
+    reader.VerifyChecksum();
+    std::cout << "Call reader.GetDataBlocks" << std::endl;
+    reader.GetDataBlocks(ropts, blocks);
+    for (size_t i = 0; i < blocks.size(); ++i) {
+      size_t number = i + 1;
+      std::cout << "[DATA BLOCK " << number << "] size: " << blocks[i].size() << std::endl;
+      for (size_t j = 0; j < blocks[i].size(); ++j) {
+        std::cout << blocks[i].data()[j];
+      }
+      std::cout << std::endl;
+      std::cout << "--------------------------------------------" << std::endl;
+    }
+  }
+
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
-	uint64_t kNumKeys = 1000000000;
+	// uint64_t kNumKeys = 1000000000;
+  uint64_t kNumKeys = 100;
 	FileWrite(kNumKeys);
 	FileWriteVector(kNumKeys);
   }
@@ -281,7 +300,6 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   }
   CreateFileAndCheck(keys);
 } */
-
 
 TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
   options_.comparator = test::Uint64Comparator();
@@ -313,6 +331,12 @@ TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
   std::vector<int> results;
   FilterWithGPUVector(ctx, results);
 
+}
+
+TEST_F(SstFileFilterReaderTest, GetDataBlocks) {
+  options_.comparator = test::Uint64Comparator();
+  std::vector<Slice> blocks;
+  GetDataBlocks(blocks);
 }
 
 }  // namespace rocksdb

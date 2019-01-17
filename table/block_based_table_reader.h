@@ -114,6 +114,10 @@ class BlockBasedTable : public TableReader {
                                 bool skip_filters = false,
                                 bool for_compaction = false) override;
 
+  // RUDA
+  // Returns all DataBlocks on SST File.
+  Status GetDataBlocks(const ReadOptions&, std::vector<Slice>& blocks) override;
+
   FragmentedRangeTombstoneIterator* NewRangeTombstoneIterator(
       const ReadOptions& read_options) override;
 

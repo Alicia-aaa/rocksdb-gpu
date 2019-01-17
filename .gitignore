@@ -76,3 +76,4 @@ fbcode
 buckifier/*.pyc
 
 .vscode/
+sst_testfile_*

@@ -2402,6 +2402,48 @@ InternalIterator* BlockBasedTable::NewIterator(
   }
 }
 
+Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
+                                      std::vector<Slice>& blocks) {
+  Status s;
+
+  IndexBlockIter iiter_on_stack;
+  auto iiter =
+      NewIndexIterator(read_options,
+                       /* disable_prefix_seek */ false, &iiter_on_stack,
+                       /* index_entry */ nullptr, /* get_context */ nullptr);
+  std::unique_ptr<InternalIteratorBase<BlockHandle>> iiter_unique_ptr;
+  if (iiter != &iiter_on_stack) {
+    iiter_unique_ptr.reset(iiter);
+  }
+
+  for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
+    BlockHandle handle = iiter->value();
+    Slice compression_dict;
+    if (s.ok() && rep_->compression_dict_block) {
+      compression_dict = rep_->compression_dict_block->data;
+    }
+
+    std::unique_ptr<Block> block_value;
+    if (s.ok()) {
+      s = ReadBlockFromFile(
+          rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
+          read_options, handle, &block_value, rep_->ioptions,
+          rep_->blocks_maybe_compressed /*do_decompress*/,
+          rep_->blocks_maybe_compressed, compression_dict,
+          rep_->persistent_cache_options, rep_->global_seqno,
+          rep_->table_options.read_amp_bytes_per_bit,
+          GetMemoryAllocator(rep_->table_options));
+    }
+    if (s.ok()) {
+      char *copied = new char[block_value.get()->size()];
+      memcpy(copied, block_value.get()->data(), block_value.get()->size());
+      blocks.emplace_back(copied, block_value.get()->size());
+    }
+  }
+
+  return s;
+}
+
 FragmentedRangeTombstoneIterator* BlockBasedTable::NewRangeTombstoneIterator(
     const ReadOptions& read_options) {
   if (rep_->fragmented_range_dels == nullptr) {

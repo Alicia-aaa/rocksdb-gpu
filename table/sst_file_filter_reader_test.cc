@@ -251,22 +251,20 @@ class SstFileFilterReaderTest : public testing::Test {
 
   }
 
-  void GetDataBlocks(std::vector<Slice>& blocks) {
+  void GetDataBlocks(std::vector<char>& data,
+                     std::vector<uint32_t>& seek_indices) {
     ReadOptions ropts;
     SstFileFilterReader reader(options_);
     reader.Open(sst_name_);
     reader.VerifyChecksum();
     std::cout << "Call reader.GetDataBlocks" << std::endl;
-    reader.GetDataBlocks(ropts, blocks);
-    for (size_t i = 0; i < blocks.size(); ++i) {
-      size_t number = i + 1;
-      std::cout << "[DATA BLOCK " << number << "] size: " << blocks[i].size() << std::endl;
-      for (size_t j = 0; j < blocks[i].size(); ++j) {
-        std::cout << blocks[i].data()[j];
-      }
-      std::cout << std::endl;
-      std::cout << "--------------------------------------------" << std::endl;
+    reader.GetDataBlocks(ropts, data, seek_indices);
+    std::cout << "[GetDataBlocks] Total DataBlock data" << std::endl;
+    for (size_t i = 0; i < data.size(); ++i) {
+      std::cout << data[i];
     }
+    std::cout << std::endl;
+    std::cout << "--------------------------------------------" << std::endl;
   }
 
   virtual void SetUp() {
@@ -336,8 +334,9 @@ TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
 
 TEST_F(SstFileFilterReaderTest, GetDataBlocks) {
   options_.comparator = test::Uint64Comparator();
-  std::vector<Slice> blocks;
-  GetDataBlocks(blocks);
+  std::vector<char> data;
+  std::vector<uint32_t> seek_indices;
+  GetDataBlocks(data, seek_indices);
 }
 
 }  // namespace rocksdb

@@ -87,9 +87,10 @@ Status SstFileFilterReader::BulkReturn(const std::string& file_path, char * scra
 }
 
 Status SstFileFilterReader::GetDataBlocks(const ReadOptions& options,
-                                          std::vector<Slice>& blocks) {
+                                          std::vector<char>& data,
+                                          std::vector<uint32_t>& seek_indices) {
   auto r = rep_.get();
-  return r->table_reader->GetDataBlocks(options, blocks);
+  return r->table_reader->GetDataBlocks(options, data, seek_indices);
 }
 
 Iterator* SstFileFilterReader::NewIterator(const ReadOptions& options) {

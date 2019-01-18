@@ -48,7 +48,8 @@ class TableReader {
   // RUDA
   // Returns all DataBlocks on SST file.
   virtual Status GetDataBlocks(const ReadOptions&,
-                               std::vector<Slice>& /* blocks */) {
+                               std::vector<char>& /* data */,
+                               std::vector<uint32_t>& /* seek_indices */) {
     return Status();
   };
 

@@ -116,7 +116,9 @@ class BlockBasedTable : public TableReader {
 
   // RUDA
   // Returns all DataBlocks on SST File.
-  Status GetDataBlocks(const ReadOptions&, std::vector<Slice>& blocks) override;
+  Status GetDataBlocks(const ReadOptions&,
+                       std::vector<char>& data,
+                       std::vector<uint32_t>& seek_indices) override;
 
   FragmentedRangeTombstoneIterator* NewRangeTombstoneIterator(
       const ReadOptions& read_options) override;

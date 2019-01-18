@@ -2403,7 +2403,9 @@ InternalIterator* BlockBasedTable::NewIterator(
 }
 
 Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
-                                      std::vector<Slice>& blocks) {
+                                      std::vector<char>& data,
+                                      // Not used yet
+                                      std::vector<uint32_t>& /* seek_indices */) {
   Status s;
 
   IndexBlockIter iiter_on_stack;
@@ -2423,11 +2425,11 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
       compression_dict = rep_->compression_dict_block->data;
     }
 
-    std::unique_ptr<Block> block_value;
+    std::unique_ptr<Block> block;
     if (s.ok()) {
       s = ReadBlockFromFile(
           rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
-          read_options, handle, &block_value, rep_->ioptions,
+          read_options, handle, &block, rep_->ioptions,
           rep_->blocks_maybe_compressed /*do_decompress*/,
           rep_->blocks_maybe_compressed, compression_dict,
           rep_->persistent_cache_options, rep_->global_seqno,
@@ -2435,9 +2437,17 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
           GetMemoryAllocator(rep_->table_options));
     }
     if (s.ok()) {
-      char *copied = new char[block_value.get()->size()];
-      memcpy(copied, block_value.get()->data(), block_value.get()->size());
-      blocks.emplace_back(copied, block_value.get()->size());
+      printf("Datablock info\n");
+      printf("data: %s\n", block.get()->data());
+      printf("size: %zu\n", block.get()->size());
+      printf("usable_size: %zu\n", block.get()->usable_size());
+      printf("NumRestarts: %u\n", block.get()->NumRestarts());
+      const char *block_data = block.get()->data();
+      size_t block_size = block.get()->size();
+      std::copy(
+        block_data, block_data + block_size, std::back_inserter(data));
+      // TODO(totoro): Inserts decoded seek indices(a.k.a. restarts) to
+      //               seek_indices vector.
     }
   }
 

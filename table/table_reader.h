@@ -49,7 +49,7 @@ class TableReader {
   // Returns all DataBlocks on SST file.
   virtual Status GetDataBlocks(const ReadOptions&,
                                std::vector<char>& /* data */,
-                               std::vector<uint32_t>& /* seek_indices */) {
+                               std::vector<uint64_t>& /* seek_indices */) {
     return Status();
   };
 

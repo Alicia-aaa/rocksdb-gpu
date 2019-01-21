@@ -14,6 +14,7 @@
 #include "cuda/filter.h"
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
+#include "table/block.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 #include "utilities/merge_operators.h"
@@ -252,27 +253,68 @@ class SstFileFilterReaderTest : public testing::Test {
   }
 
   void GetDataBlocks(std::vector<char>& data,
-                     std::vector<uint32_t>& seek_indices) {
+                     std::vector<uint64_t>& seek_indices) {
     ReadOptions ropts;
     SstFileFilterReader reader(options_);
     reader.Open(sst_name_);
     reader.VerifyChecksum();
-    std::cout << "Call reader.GetDataBlocks" << std::endl;
+    std::cout << "[GetDataBlocks]" << std::endl;
     reader.GetDataBlocks(ropts, data, seek_indices);
-    std::cout << "[GetDataBlocks] Total DataBlock data" << std::endl;
-    for (size_t i = 0; i < data.size(); ++i) {
-      std::cout << data[i];
-    }
-    std::cout << std::endl;
     std::cout << "--------------------------------------------" << std::endl;
+  }
+
+  void DecodeDataBlocksOnCpu(std::vector<char>& data,
+                             std::vector<uint64_t>& seek_indices) {
+    // Decode
+    // TODO(totoro): Implements this logics to DataBulkCpuIter.
+    std::cout << "[DecodeDataBlocksOnCpu]" << std::endl;
+    const char *start = &data[0];
+    uint64_t count = 0;
+    for (size_t i = 0; i < seek_indices.size(); ++i) {
+      const char *limit = (i == seek_indices.size() - 1)
+          ? start + data.size()
+          : start + seek_indices[i + 1];
+      const char *subblock = start + seek_indices[i];
+      while (subblock < limit) {
+        uint32_t shared, non_shared, value_length;
+        Slice key;
+        subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
+                                &value_length);
+        if (shared == 0) {
+          key = Slice(subblock, non_shared);
+        } else {
+          // TODO(totoro): We need to consider 'shared' data within subblock.
+          key = Slice(subblock, shared + non_shared);
+        }
+
+        Slice value = Slice(subblock + non_shared, value_length);
+
+        // Next DataKey...
+        uint64_t next_offset = static_cast<uint64_t>(
+          (value.data() + value.size()) - start
+        );
+
+        if (count % 1000000 == 0) {
+          std::cout << "key[" << DecodeFixed64(key.data()) << "] "
+              << "value[" << DecodeFixed64(value.data()) << "] "
+              << "next_offset[" << next_offset << "] "
+              << "while_test: " << (void *) (start + next_offset)
+                  << " < " << (void *) limit
+                  << " = " << ((start + next_offset) < limit)
+              << std::endl;
+        }
+        subblock = start + next_offset;
+        count++;
+      }
+    }
   }
 
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
 	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 100;
+  uint64_t kNumKeys = 1000000;
 	FileWrite(kNumKeys);
-	FileWriteVector(kNumKeys);
+	// FileWriteVector(kNumKeys);
   }
 
  protected:
@@ -300,43 +342,44 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   CreateFileAndCheck(keys);
 } */
 
-TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
-  options_.comparator = test::Uint64Comparator();
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<int> results;
-  FilterWithCPU(ctx, results);
+// TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
+//   options_.comparator = test::Uint64Comparator();
+//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   std::vector<int> results;
+//   FilterWithCPU(ctx, results);
 
-}
+// }
 
-TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
-  options_.comparator = test::Uint64Comparator();
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<int> results;
-  FilterWithCPUVector(ctx, results);
+// TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
+//   options_.comparator = test::Uint64Comparator();
+//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   std::vector<int> results;
+//   FilterWithCPUVector(ctx, results);
 
-}
+// }
 
-TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
-  options_.comparator = test::Uint64Comparator();
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<int> results;
-  FilterWithGPU(ctx, results);
+// TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
+//   options_.comparator = test::Uint64Comparator();
+//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   std::vector<int> results;
+//   FilterWithGPU(ctx, results);
 
-}
+// }
 
-TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
-  options_.comparator = test::Uint64Comparator();
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<int> results;
-  FilterWithGPUVector(ctx, results);
+// TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
+//   options_.comparator = test::Uint64Comparator();
+//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   std::vector<int> results;
+//   FilterWithGPUVector(ctx, results);
 
-}
+// }
 
-TEST_F(SstFileFilterReaderTest, GetDataBlocks) {
+TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
   options_.comparator = test::Uint64Comparator();
   std::vector<char> data;
-  std::vector<uint32_t> seek_indices;
+  std::vector<uint64_t> seek_indices;
   GetDataBlocks(data, seek_indices);
+  DecodeDataBlocksOnCpu(data, seek_indices);
 }
 
 }  // namespace rocksdb

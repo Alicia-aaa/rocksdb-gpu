@@ -14,6 +14,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
@@ -2404,8 +2405,7 @@ InternalIterator* BlockBasedTable::NewIterator(
 
 Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
                                       std::vector<char>& data,
-                                      // Not used yet
-                                      std::vector<uint32_t>& /* seek_indices */) {
+                                      std::vector<uint64_t>& seek_indices) {
   Status s;
 
   IndexBlockIter iiter_on_stack;
@@ -2418,6 +2418,7 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
     iiter_unique_ptr.reset(iiter);
   }
 
+  uint64_t accumulated_data_index = 0;
   for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
     BlockHandle handle = iiter->value();
     Slice compression_dict;
@@ -2437,17 +2438,44 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
           GetMemoryAllocator(rep_->table_options));
     }
     if (s.ok()) {
-      printf("Datablock info\n");
-      printf("data: %s\n", block.get()->data());
-      printf("size: %zu\n", block.get()->size());
-      printf("usable_size: %zu\n", block.get()->usable_size());
-      printf("NumRestarts: %u\n", block.get()->NumRestarts());
       const char *block_data = block.get()->data();
-      size_t block_size = block.get()->size();
+      uint32_t block_restart_offset = block.get()->restart_offset();
+      uint32_t block_num_restarts = block.get()->NumRestarts();
+
+      // printf("Datablock Start---------------\n");
+      // printf("size: %zu\n", block_size);
+      // printf("restart_offset: %u\n", block_restart_offset);
+      // printf("NumRestarts: %u\n", block_num_restarts);
+
+      // printf("data:\n");
+      // DataBlockIter biter;
+      // NewDataBlockIterator<DataBlockIter>(
+      //     rep_, read_options, handle, &biter, false,
+      //     true /* key_includes_seq */);
+
+      // for (biter.SeekToFirst(); biter.Valid(); biter.Next()) {
+      //   ParsedInternalKey parsed_key;
+      //   if (!ParseInternalKey(biter.key(), &parsed_key)) {
+      //     s = Status::Corruption(Slice());
+      //   }
+
+      //   std::cout
+      //       << "key[" << DecodeFixed64(biter.key().data()) << "] "
+      //       << "parsed_key[" << DecodeFixed64(parsed_key.user_key.data()) << "] "
+      //       << "value[" << DecodeFixed64(biter.value().data()) << "]"
+      //       << std::endl;
+      // }
+      // printf("---------------DataBlock End\n");
+
       std::copy(
-        block_data, block_data + block_size, std::back_inserter(data));
-      // TODO(totoro): Inserts decoded seek indices(a.k.a. restarts) to
-      //               seek_indices vector.
+          block_data, block_data + block_restart_offset,
+          std::back_inserter(data));
+      for (size_t i = 0; i < block_num_restarts; ++i) {
+        uint64_t seek_index = block.get()->GetDecodedSeekIndex(i);
+        seek_index += accumulated_data_index;
+        seek_indices.push_back(seek_index);
+      }
+      accumulated_data_index += block_restart_offset;
     }
   }
 

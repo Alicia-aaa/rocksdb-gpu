@@ -43,6 +43,42 @@ class DataBlockIter;
 class IndexBlockIter;
 class BlockPrefixIndex;
 
+// Helper routine: decode the next block entry starting at "p",
+// storing the number of shared key bytes, non_shared key bytes,
+// and the length of the value in "*shared", "*non_shared", and
+// "*value_length", respectively.  Will not derefence past "limit".
+//
+// If any errors are detected, returns nullptr.  Otherwise, returns a
+// pointer to the key delta (just past the three decoded values).
+struct DecodeEntry {
+  inline const char* operator()(const char* p, const char* limit,
+                                uint32_t* shared, uint32_t* non_shared,
+                                uint32_t* value_length) {
+    // We need 2 bytes for shared and non_shared size. We also need one more
+    // byte either for value size or the actual value in case of value delta
+    // encoding.
+    assert(limit - p >= 3);
+    *shared = reinterpret_cast<const unsigned char*>(p)[0];
+    *non_shared = reinterpret_cast<const unsigned char*>(p)[1];
+    *value_length = reinterpret_cast<const unsigned char*>(p)[2];
+    if ((*shared | *non_shared | *value_length) < 128) {
+      // Fast path: all three values are encoded in one byte each
+      p += 3;
+    } else {
+      if ((p = GetVarint32Ptr(p, limit, shared)) == nullptr) return nullptr;
+      if ((p = GetVarint32Ptr(p, limit, non_shared)) == nullptr) return nullptr;
+      if ((p = GetVarint32Ptr(p, limit, value_length)) == nullptr) {
+        return nullptr;
+      }
+    }
+
+    // Using an assert in place of "return null" since we should not pay the
+    // cost of checking for corruption on every single key decoding
+    assert(!(static_cast<uint32_t>(limit - p) < (*non_shared + *value_length)));
+    return p;
+  }
+};
+
 // BlockReadAmpBitmap is a bitmap that map the rocksdb::Block data bytes to
 // a bitmap with ratio bytes_per_bit. Whenever we access a range of bytes in
 // the Block we update the bitmap and increment READ_AMP_ESTIMATE_USEFUL_BYTES.
@@ -156,6 +192,7 @@ class Block {
   // The additional memory space taken by the block data.
   size_t usable_size() const { return contents_.usable_size(); }
   uint32_t NumRestarts() const;
+  uint32_t restart_offset() const { return restart_offset_; }
   bool own_bytes() const { return contents_.own_bytes(); }
 
   BlockBasedTableOptions::DataBlockIndexType IndexType() const;
@@ -201,6 +238,8 @@ class Block {
   size_t ApproximateMemoryUsage() const;
 
   SequenceNumber global_seqno() const { return global_seqno_; }
+
+  uint32_t GetDecodedSeekIndex(uint32_t index);
 
  private:
   BlockContents contents_;

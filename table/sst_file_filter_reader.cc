@@ -88,7 +88,7 @@ Status SstFileFilterReader::BulkReturn(const std::string& file_path, char * scra
 
 Status SstFileFilterReader::GetDataBlocks(const ReadOptions& options,
                                           std::vector<char>& data,
-                                          std::vector<uint32_t>& seek_indices) {
+                                          std::vector<uint64_t>& seek_indices) {
   auto r = rep_.get();
   return r->table_reader->GetDataBlocks(options, data, seek_indices);
 }

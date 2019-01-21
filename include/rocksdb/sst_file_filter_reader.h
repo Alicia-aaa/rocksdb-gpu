@@ -29,7 +29,7 @@ class SstFileFilterReader {
   Status BulkReturn(const std::string& file_path, char * scratch);
   Status GetDataBlocks(const ReadOptions& options,
                        std::vector<char>& data,
-                       std::vector<uint32_t>& seek_indices);
+                       std::vector<uint64_t>& seek_indices);
   // Returns a new iterator over the table contents.
   // Most read options provide the same control as we read from DB.
   // If "snapshot" is nullptr, the iterator returns only the latest keys.

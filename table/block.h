@@ -43,6 +43,7 @@ class DataBlockIter;
 class IndexBlockIter;
 class BlockPrefixIndex;
 
+// Note(totoro): This implementation moved from 'block.cc' to use on cuda codes.
 // Helper routine: decode the next block entry starting at "p",
 // storing the number of shared key bytes, non_shared key bytes,
 // and the length of the value in "*shared", "*non_shared", and

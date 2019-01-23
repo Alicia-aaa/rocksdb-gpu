@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "rocksdb/slice.h"
+
 namespace ruda {
 
 const int RUDA_ERR = -1;
@@ -56,4 +58,10 @@ int sstChunkFilter(const char *values,
 int sstIntNativeFilter(const std::vector<int> &values,
                        const ConditionContext context,
                        std::vector<int> &results);
+
+int sstIntBlockFilter(const std::vector<char> &datablocks,
+                      const std::vector<uint64_t> &seek_indices,
+                      const ConditionContext context,
+                      std::vector<rocksdb::Slice> &results);
+
 }  // namespace ruda

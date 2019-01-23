@@ -309,10 +309,21 @@ class SstFileFilterReaderTest : public testing::Test {
     }
   }
 
+  void DecodeDataBlocksOnGpu(std::vector<char> &data,
+                             std::vector<uint64_t> &seek_indices,
+                             ruda::ConditionContext &ctx,
+                             std::vector<Slice> &results) {
+    // Decode
+    // TODO(totoro): Implements this logics to DataBulkCpuIter.
+    std::cout << "[DecodeDataBlocksOnGpu] START" << std::endl;
+    ruda::sstIntBlockFilter(data, seek_indices, ctx, results);
+    std::cout << "[DecodeDataBlocksOnGpu] END" << std::endl;
+  }
+
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
 	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 1000000;
+  uint64_t kNumKeys = 100;
 	FileWrite(kNumKeys);
 	// FileWriteVector(kNumKeys);
   }
@@ -380,6 +391,16 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
   std::vector<uint64_t> seek_indices;
   GetDataBlocks(data, seek_indices);
   DecodeDataBlocksOnCpu(data, seek_indices);
+}
+
+TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
+  options_.comparator = test::Uint64Comparator();
+  std::vector<char> data;
+  std::vector<uint64_t> seek_indices;
+  GetDataBlocks(data, seek_indices);
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<Slice> results;
+  DecodeDataBlocksOnGpu(data, seek_indices, ctx, results);
 }
 
 }  // namespace rocksdb

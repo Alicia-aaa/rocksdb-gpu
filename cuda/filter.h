@@ -62,6 +62,8 @@ int sstIntNativeFilter(const std::vector<int> &values,
 int sstIntBlockFilter(const std::vector<char> &datablocks,
                       const std::vector<uint64_t> &seek_indices,
                       const ConditionContext context,
-                      std::vector<rocksdb::Slice> &results);
+                      const size_t results_count,
+                      std::vector<rocksdb::Slice> &keys,
+                      std::vector<rocksdb::Slice> &values);
 
 }  // namespace ruda

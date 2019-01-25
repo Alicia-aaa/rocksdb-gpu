@@ -253,13 +253,15 @@ class SstFileFilterReaderTest : public testing::Test {
   }
 
   void GetDataBlocks(std::vector<char>& data,
-                     std::vector<uint64_t>& seek_indices) {
+                     std::vector<uint64_t>& seek_indices,
+                     size_t &results_count) {
     ReadOptions ropts;
     SstFileFilterReader reader(options_);
     reader.Open(sst_name_);
     reader.VerifyChecksum();
     std::cout << "[GetDataBlocks]" << std::endl;
     reader.GetDataBlocks(ropts, data, seek_indices);
+    results_count = reader.GetTableProperties()->num_entries;
     std::cout << "--------------------------------------------" << std::endl;
   }
 
@@ -294,7 +296,7 @@ class SstFileFilterReaderTest : public testing::Test {
           (value.data() + value.size()) - start
         );
 
-        if (count % 1000000 == 0) {
+        if (count % 10 == 0) {
           std::cout << "key[" << DecodeFixed64(key.data()) << "] "
               << "value[" << DecodeFixed64(value.data()) << "] "
               << "next_offset[" << next_offset << "] "
@@ -309,14 +311,17 @@ class SstFileFilterReaderTest : public testing::Test {
     }
   }
 
-  void DecodeDataBlocksOnGpu(std::vector<char> &data,
-                             std::vector<uint64_t> &seek_indices,
-                             ruda::ConditionContext &ctx,
-                             std::vector<Slice> &results) {
+  void FilterDataBlocksOnGpu(const std::vector<char> &data,
+                             const std::vector<uint64_t> &seek_indices,
+                             const ruda::ConditionContext &ctx,
+                             const size_t results_count,
+                             std::vector<Slice> &keys,
+                             std::vector<Slice> &values) {
     // Decode
     // TODO(totoro): Implements this logics to DataBulkCpuIter.
     std::cout << "[DecodeDataBlocksOnGpu] START" << std::endl;
-    ruda::sstIntBlockFilter(data, seek_indices, ctx, results);
+    ruda::sstIntBlockFilter(
+        data, seek_indices, ctx, results_count, keys, values);
     std::cout << "[DecodeDataBlocksOnGpu] END" << std::endl;
   }
 
@@ -389,7 +394,8 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
   options_.comparator = test::Uint64Comparator();
   std::vector<char> data;
   std::vector<uint64_t> seek_indices;
-  GetDataBlocks(data, seek_indices);
+  size_t results_count;
+  GetDataBlocks(data, seek_indices, results_count);
   DecodeDataBlocksOnCpu(data, seek_indices);
 }
 
@@ -397,10 +403,17 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
   options_.comparator = test::Uint64Comparator();
   std::vector<char> data;
   std::vector<uint64_t> seek_indices;
-  GetDataBlocks(data, seek_indices);
+  size_t results_count;
+  GetDataBlocks(data, seek_indices, results_count);
   ruda::ConditionContext ctx = { ruda::EQ, 5,};
-  std::vector<Slice> results;
-  DecodeDataBlocksOnGpu(data, seek_indices, ctx, results);
+  std::vector<Slice> keys, values;
+  FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
+  std::cout << "Filter Results" << std::endl;
+  for (size_t i = 0; i < keys.size(); ++i) {
+    std::cout << "keys[" << keys[i].ToString()
+        << "] values[" << values[i].ToString() << "]"
+        << std::endl;
+  }
 }
 
 }  // namespace rocksdb

@@ -484,4 +484,6 @@ JNI_NATIVE_SOURCES =                                          \
   java/rocksjni/write_buffer_manager.cc
 
 # RocksDB-GPU
-CUDA_SOURCES = cuda/filter.cu
+CUDA_SOURCES =          \
+  cuda/block_decoder.cu \
+  cuda/filter.cu

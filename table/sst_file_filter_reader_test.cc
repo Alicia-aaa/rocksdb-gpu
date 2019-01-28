@@ -328,7 +328,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
 	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 100;
+  uint64_t kNumKeys = 100000;
 	FileWrite(kNumKeys);
 	// FileWriteVector(kNumKeys);
   }
@@ -379,7 +379,6 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 //   ruda::ConditionContext ctx = { ruda::EQ, 5,};
 //   std::vector<int> results;
 //   FilterWithGPU(ctx, results);
-
 // }
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
@@ -408,12 +407,12 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
   ruda::ConditionContext ctx = { ruda::EQ, 5,};
   std::vector<Slice> keys, values;
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
-  std::cout << "Filter Results" << std::endl;
-  for (size_t i = 0; i < keys.size(); ++i) {
-    std::cout << "keys[" << DecodeFixed64(keys[i].data())
-        << "] values[" << DecodeFixed64(values[i].data()) << "]"
-        << std::endl;
-  }
+  // std::cout << "Filter Results" << std::endl;
+  // for (size_t i = 0; i < keys.size(); ++i) {
+  //   std::cout << "keys[" << DecodeFixed64(keys[i].data())
+  //       << "] values[" << DecodeFixed64(values[i].data()) << "]"
+  //       << std::endl;
+  // }
 }
 
 }  // namespace rocksdb

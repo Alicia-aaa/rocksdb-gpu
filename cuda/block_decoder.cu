@@ -1,3 +1,4 @@
+#include <cstdio>
 
 #include "cuda/block_decoder.h"
 
@@ -81,8 +82,10 @@ void DecodeSubDataBlocks(// Parameters
                          const char *cached_data,
                          const uint64_t cached_data_size,
                          const uint64_t start_idx, const uint64_t end_idx,
+                         ConditionContext *ctx,
                          // Results
-                         int *results_idx, ruda::RudaSlice *results_keys,
+                         unsigned long long int *results_idx,
+                         ruda::RudaSlice *results_keys,
                          ruda::RudaSlice *results_values) {
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
@@ -103,8 +106,7 @@ void DecodeSubDataBlocks(// Parameters
 
     const char *value = subblock + non_shared;
 
-    uint64_t idx = *results_idx;
-    atomicAdd(results_idx, 1);
+    unsigned long long int idx = atomicAdd(results_idx, 1);
     char *results_key = new char[key_size];
     char *results_value = new char[value_size];
     memcpy(results_key, key, key_size);

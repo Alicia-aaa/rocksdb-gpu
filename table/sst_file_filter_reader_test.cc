@@ -296,15 +296,15 @@ class SstFileFilterReaderTest : public testing::Test {
           (value.data() + value.size()) - start
         );
 
-        if (count % 10 == 0) {
-          std::cout << "key[" << DecodeFixed64(key.data()) << "] "
-              << "value[" << DecodeFixed64(value.data()) << "] "
-              << "next_offset[" << next_offset << "] "
-              << "while_test: " << (void *) (start + next_offset)
-                  << " < " << (void *) limit
-                  << " = " << ((start + next_offset) < limit)
-              << std::endl;
-        }
+        // if (count % 10 == 0) {
+        //   std::cout << "key[" << DecodeFixed64(key.data()) << "] "
+        //       << "value[" << DecodeFixed64(value.data()) << "] "
+        //       << "next_offset[" << next_offset << "] "
+        //       << "while_test: " << (void *) (start + next_offset)
+        //           << " < " << (void *) limit
+        //           << " = " << ((start + next_offset) < limit)
+        //       << std::endl;
+        // }
         subblock = start + next_offset;
         count++;
       }
@@ -410,8 +410,8 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
   std::cout << "Filter Results" << std::endl;
   for (size_t i = 0; i < keys.size(); ++i) {
-    std::cout << "keys[" << keys[i].ToString()
-        << "] values[" << values[i].ToString() << "]"
+    std::cout << "keys[" << DecodeFixed64(keys[i].data())
+        << "] values[" << DecodeFixed64(values[i].data()) << "]"
         << std::endl;
   }
 }

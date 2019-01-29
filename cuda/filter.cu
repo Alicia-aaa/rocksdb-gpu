@@ -38,13 +38,12 @@ namespace kernel {
                                 // Variables
                                 unsigned long long int *results_idx,
                                 // Results
-                                ruda::RudaSlice * results_keys,
-                                ruda::RudaSlice * results_values);
+                                RudaKVPair *results);
   __global__
   void rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources);
   __global__
   void rudaIntFilterKernel(ConditionContext *context, int *values,
-                          int *results);
+                           int *results);
 }  // namespace kernel
 
 struct RudaIntTransformator {
@@ -77,19 +76,17 @@ struct RudaBlockFilterContext {
   // Parameters
   char *d_datablocks;
   uint64_t *d_seek_indices;
-  ConditionContext *d_cond_context;
+  ConditionContext *d_cond_ctx;
   uint64_t *d_block_seek_start_indices;
 
   // Results - Device
   unsigned long long int *d_results_idx;   // Atomic incrementer index
-  RudaSlice *d_results_keys;   // Filtered keys
-  RudaSlice *d_results_values; // Filtered values
+  RudaKVPair *d_results;    // Filtered KV pairs
 
   // Results - Host
   // Total results count copied from 'd_results_idx' after kernel call.
   unsigned long long int h_results_count;
-  RudaSlice *h_results_keys;   // Filtered keys
-  RudaSlice *h_results_values; // Filtered values
+  RudaKVPair *h_results;    // Filtered KV pairs
 
   // Cuda Kernel Parameters
   const size_t kSize = 0;
@@ -104,7 +101,7 @@ struct RudaBlockFilterContext {
         kGridSize(ceil((float) total_size / (float) block_size)),
         kMaxResultsCount(max_results_count) {}
 
-  size_t CalculateBlockSeekIndices(const std::vector<uint64_t> &seek_indices) {
+  size_t calculateBlockSeekIndices(const std::vector<uint64_t> &seek_indices) {
     uint64_t block_seek_start_indices[kGridSize];
 
     for (size_t i = 0; i < kGridSize; ++i) {
@@ -132,25 +129,23 @@ struct RudaBlockFilterContext {
 
   void populateParametersToCuda(const std::vector<char> &datablocks,
                                 const std::vector<uint64_t> &seek_indices,
-                                const ConditionContext &cond_context) {
+                                const ConditionContext &cond_ctx) {
     // Cuda Parameters
     cudaCheckError(cudaMalloc(
         (void **) &d_datablocks, sizeof(char) * datablocks.size()));
     cudaCheckError(cudaMalloc(
         (void **) &d_seek_indices, sizeof(uint64_t) * kSize));
     cudaCheckError(cudaMalloc(
-        (void **) &d_cond_context, sizeof(ConditionContext)));
+        (void **) &d_cond_ctx, sizeof(ConditionContext)));
     cudaCheckError(cudaMalloc(
         (void **) &d_block_seek_start_indices, sizeof(uint64_t) * kGridSize));
-    kMaxCacheSize = CalculateBlockSeekIndices(seek_indices);
+    kMaxCacheSize = calculateBlockSeekIndices(seek_indices);
 
     // Cuda Results
     cudaCheckError(cudaMalloc(
         (void **) &d_results_idx, sizeof(unsigned long long int)));
     cudaCheckError(cudaMalloc(
-        (void **) &d_results_keys, sizeof(RudaSlice) * kMaxResultsCount));
-    cudaCheckError(cudaMalloc(
-        (void **) &d_results_values, sizeof(RudaSlice) * kMaxResultsCount));
+        (void **) &d_results, sizeof(RudaKVPair) * kMaxResultsCount));
 
     cudaCheckError(cudaMemcpy(
         d_datablocks, &datablocks[0], sizeof(char) * datablocks.size(),
@@ -159,7 +154,7 @@ struct RudaBlockFilterContext {
         d_seek_indices, &seek_indices[0], sizeof(uint64_t) * kSize,
         cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(
-        d_cond_context, &cond_context, sizeof(ConditionContext),
+        d_cond_ctx, &cond_ctx, sizeof(ConditionContext),
         cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemset(
         d_results_idx, 0, sizeof(unsigned long long int)));
@@ -170,51 +165,9 @@ struct RudaBlockFilterContext {
     cudaCheckError(cudaMemcpy(
         &h_results_count, d_results_idx, sizeof(unsigned long long int),
         cudaMemcpyDeviceToHost));
-    h_results_keys = new RudaSlice[h_results_count];
-    h_results_values = new RudaSlice[h_results_count];
+    cudaMallocHost((void **) &h_results, sizeof(RudaKVPair) * h_results_count);
     cudaCheckError(cudaMemcpy(
-        h_results_keys, d_results_keys, sizeof(RudaSlice) * h_results_count,
-        cudaMemcpyDeviceToHost));
-    cudaCheckError(cudaMemcpy(
-        h_results_values, d_results_values, sizeof(RudaSlice) * h_results_count,
-        cudaMemcpyDeviceToHost));
-
-    // Populates results from cuda heap space.
-    for (size_t i = 0; i < h_results_count; ++i) {
-      cudaCheckError(cudaMalloc(
-          (void **) &h_results_keys[i].data_,
-          sizeof(char) * h_results_keys[i].size()));
-      cudaCheckError(cudaMalloc(
-          (void **) &h_results_values[i].data_,
-          sizeof(char) * h_results_values[i].size()));
-    }
-
-    cudaCheckError(cudaFree(d_results_keys));
-    cudaCheckError(cudaFree(d_results_values));
-    cudaCheckError(cudaMalloc(
-        (void **) &d_results_keys, sizeof(RudaSlice) * h_results_count));
-    cudaCheckError(cudaMalloc(
-        (void **) &d_results_values, sizeof(RudaSlice) * h_results_count));
-
-    cudaCheckError(cudaMemcpy(
-        d_results_keys, h_results_keys, sizeof(RudaSlice) * h_results_count,
-        cudaMemcpyHostToDevice));
-    cudaCheckError(cudaMemcpy(
-        d_results_values, h_results_values, sizeof(RudaSlice) * h_results_count,
-        cudaMemcpyHostToDevice));
-
-    size_t kResultsGridSize = ceil(
-        (float) h_results_count / (float) kBlockSize);
-    kernel::rudaPopulateSlicesFromHeap<<<kResultsGridSize, kBlockSize>>> (
-        h_results_count, d_results_keys);
-    kernel::rudaPopulateSlicesFromHeap<<<kResultsGridSize, kBlockSize>>> (
-        h_results_count, d_results_values);
-
-    cudaCheckError(cudaMemcpy(
-        h_results_keys, d_results_keys, sizeof(RudaSlice) * h_results_count,
-        cudaMemcpyDeviceToHost));
-    cudaCheckError(cudaMemcpy(
-        h_results_values, d_results_values, sizeof(RudaSlice) * h_results_count,
+        h_results, d_results, sizeof(RudaKVPair) * h_results_count,
         cudaMemcpyDeviceToHost));
   }
 
@@ -222,44 +175,29 @@ struct RudaBlockFilterContext {
                           std::vector<rocksdb::Slice> &values) {
     // Copy to results
     for (size_t i = 0; i < h_results_count; ++i) {
-      size_t key_size = h_results_keys[i].size();
-      size_t value_size = h_results_values[i].size();
+      size_t key_size = h_results[i].key()->size();
+      size_t value_size = h_results[i].value()->size();
       char *key = new char[key_size];
       char *value = new char[value_size];
-      cudaCheckError(cudaMemcpy(
-          key, h_results_keys[i].data(), key_size, cudaMemcpyDeviceToHost));
-      cudaCheckError(cudaMemcpy(
-          value, h_results_values[i].data(), value_size,
-          cudaMemcpyDeviceToHost));
-      keys.emplace_back(rocksdb::Slice(key, h_results_keys[i].size()));
-      values.emplace_back(rocksdb::Slice(value, h_results_keys[i].size()));
+      memcpy(key, h_results[i].key()->stackData(), sizeof(char) * key_size);
+      memcpy(
+          value, h_results[i].value()->stackData(), sizeof(char) * value_size);
+      keys.emplace_back(rocksdb::Slice(key, key_size));
+      values.emplace_back(rocksdb::Slice(value, value_size));
     }
   }
 
   void freeParametersFromCuda() {
     cudaCheckError(cudaFree(d_datablocks));
     cudaCheckError(cudaFree(d_seek_indices));
-    cudaCheckError(cudaFree(d_cond_context));
+    cudaCheckError(cudaFree(d_cond_ctx));
     cudaCheckError(cudaFree(d_block_seek_start_indices));
   }
 
   void freeResultsFromCuda() {
     cudaCheckError(cudaFree(d_results_idx));
-    cudaCheckError(cudaFree(d_results_keys));
-    cudaCheckError(cudaFree(d_results_values));
-
-    // Free 2d cuda array
-    for (size_t i = 0; i < h_results_count; ++i) {
-      if (h_results_keys[i].size() != 0) {
-        cudaCheckError(cudaFree(h_results_keys[i].data()));
-      }
-      if (h_results_values[i].size() != 0) {
-        cudaCheckError(cudaFree(h_results_values[i].data()));
-      }
-    }
-
-    delete[] h_results_keys;
-    delete[] h_results_values;
+    cudaCheckError(cudaFree(d_results));
+    cudaCheckError(cudaFreeHost(h_results));
   }
 
   void freeAllFromCuda() {
@@ -278,8 +216,7 @@ void kernel::rudaIntBlockFilterKernel(// Parameters (ReadOnly)
                                       // Variables
                                       unsigned long long int *results_idx,
                                       // Results
-                                      ruda::RudaSlice * results_keys,
-                                      ruda::RudaSlice * results_values) {
+                                      RudaKVPair *results) {
   uint64_t i = blockDim.x * blockIdx.x + threadIdx.x;
 
   // Overflow kernel ptr case.
@@ -314,7 +251,7 @@ void kernel::rudaIntBlockFilterKernel(// Parameters (ReadOnly)
       // Parameters
       cached_data, size, start, end, ctx,
       // Results
-      results_idx, results_keys, results_values);
+      results_idx, results);
 }
 
 __global__
@@ -331,7 +268,7 @@ void kernel::rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources) {
 
 __global__
 void kernel::rudaIntFilterKernel(ConditionContext *context, int *values,
-                         int *results) {
+                                 int *results) {
   int index = blockDim.x * blockIdx.x + threadIdx.x;
   switch (context->_op) {
     case EQ:
@@ -452,8 +389,8 @@ int sstIntBlockFilter(const std::vector<char> &datablocks,
       << "DataSize: " << datablocks.size() << std::endl
       << "Max Results Count: " << block_context.kMaxResultsCount << std::endl;
 
-  cudaCheckError(cudaDeviceSetLimit(
-      cudaLimitMallocHeapSize, 100 * sizeof(char) * datablocks.size()));
+  // cudaCheckError(cudaDeviceSetLimit(
+  //     cudaLimitMallocHeapSize, 100 * sizeof(char) * datablocks.size()));
 
   // Call kernel.
   kernel::rudaIntBlockFilterKernel<<<block_context.kGridSize,
@@ -462,18 +399,18 @@ int sstIntBlockFilter(const std::vector<char> &datablocks,
       // Kernel Parameters
       block_context.kSize, datablocks.size(),
       block_context.kMaxResultsCount, block_context.d_datablocks,
-      block_context.d_seek_indices, block_context.d_cond_context,
+      block_context.d_seek_indices, block_context.d_cond_ctx,
       block_context.d_block_seek_start_indices,
       // Kernel Variables
       block_context.d_results_idx,
       // Kernel Results
-      block_context.d_results_keys, block_context.d_results_values);
+      block_context.d_results);
 
   block_context.populateResultsFromCuda();
   block_context.copyToFinalResults(keys, values);
 
-  std::cout << "[BlockContext::Result]" << std::endl
-      << "Total Results Count: " << block_context.h_results_count << std::endl;
+  std::cout << "Total Results Count: " << block_context.h_results_count
+      << std::endl;
 
   // Free device variables.
   block_context.freeAllFromCuda();

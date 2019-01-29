@@ -78,6 +78,33 @@ struct DecodeEntry {
 };
 
 __device__
+uint32_t DecodeFixed32(const char* ptr) {
+  // if (port::kLittleEndian) {
+  //   // Load the raw bytes
+  //   uint32_t result;
+  //   memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
+  //   return result;
+  // }
+  return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])))
+      | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 8)
+      | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 16)
+      | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
+}
+
+__device__
+uint64_t DecodeFixed64(const char* ptr) {
+  // if (port::kLittleEndian) {
+  //   // Load the raw bytes
+  //   uint64_t result;
+  //   memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
+  //   return result;
+  // }
+  uint64_t lo = DecodeFixed32(ptr);
+  uint64_t hi = DecodeFixed32(ptr + 4);
+  return (hi << 32) | lo;
+}
+
+__device__
 void DecodeSubDataBlocks(// Parameters
                          const char *cached_data,
                          const uint64_t cached_data_size,
@@ -85,8 +112,7 @@ void DecodeSubDataBlocks(// Parameters
                          ConditionContext *ctx,
                          // Results
                          unsigned long long int *results_idx,
-                         ruda::RudaSlice *results_keys,
-                         ruda::RudaSlice *results_values) {
+                         ruda::RudaKVPair *results) {
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
   while (subblock < limit) {
@@ -105,14 +131,40 @@ void DecodeSubDataBlocks(// Parameters
     }
 
     const char *value = subblock + non_shared;
+    uint64_t decoded_value = DecodeFixed64(value);
+    bool filter_result = false;
+    switch (ctx->_op) {
+      case EQ:
+        filter_result = decoded_value == ctx->_pivot;
+        break;
+      case LESS:
+        filter_result = decoded_value < ctx->_pivot;
+        break;
+      case GREATER:
+        filter_result = decoded_value > ctx->_pivot;
+        break;
+      case LESS_EQ:
+        filter_result = decoded_value <= ctx->_pivot;
+        break;
+      case GREATER_EQ:
+        filter_result = decoded_value >= ctx->_pivot;
+        break;
+      default:
+        break;
+    }
+    if (filter_result) {
+      unsigned long long int idx = atomicAdd(results_idx, 1);
+      results[idx].key()->copyToStack(key, key_size);
+      results[idx].value()->copyToStack(value, value_size);
+    }
 
-    unsigned long long int idx = atomicAdd(results_idx, 1);
-    char *results_key = new char[key_size];
-    char *results_value = new char[value_size];
-    memcpy(results_key, key, key_size);
-    memcpy(results_value, value, value_size);
-    results_keys[idx] = RudaSlice(results_key, key_size);
-    results_values[idx] = RudaSlice(results_value, value_size);
+    // Heap Version
+    // char *results_key = new char[key_size];
+    // char *results_value = new char[value_size];
+    // memcpy(results_key, key, key_size);
+    // memcpy(results_value, value, value_size);
+    // results_keys[idx] = RudaSlice(results_key, key_size);
+    // results_values[idx] = RudaSlice(results_value, value_size);
 
     // Next DataKey...
     subblock = value + value_size;

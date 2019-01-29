@@ -8,6 +8,7 @@
 
 
 #include <inttypes.h>
+#include <chrono>
 #include <ctime>
 #include <time.h>
 
@@ -265,13 +266,15 @@ class SstFileFilterReaderTest : public testing::Test {
     std::cout << "--------------------------------------------" << std::endl;
   }
 
-  void DecodeDataBlocksOnCpu(std::vector<char>& data,
-                             std::vector<uint64_t>& seek_indices) {
+  void FilterDataBlocksOnCpu(std::vector<char>& data,
+                             std::vector<uint64_t>& seek_indices,
+                             ruda::ConditionContext& ctx,
+                             std::vector<Slice> keys,
+                             std::vector<Slice> values) {
     // Decode
     // TODO(totoro): Implements this logics to DataBulkCpuIter.
-    std::cout << "[DecodeDataBlocksOnCpu]" << std::endl;
+    std::cout << "[FilterDataBlocksOnCpu]" << std::endl;
     const char *start = &data[0];
-    uint64_t count = 0;
     for (size_t i = 0; i < seek_indices.size(); ++i) {
       const char *limit = (i == seek_indices.size() - 1)
           ? start + data.size()
@@ -296,17 +299,34 @@ class SstFileFilterReaderTest : public testing::Test {
           (value.data() + value.size()) - start
         );
 
-        // if (count % 10 == 0) {
-        //   std::cout << "key[" << DecodeFixed64(key.data()) << "] "
-        //       << "value[" << DecodeFixed64(value.data()) << "] "
-        //       << "next_offset[" << next_offset << "] "
-        //       << "while_test: " << (void *) (start + next_offset)
-        //           << " < " << (void *) limit
-        //           << " = " << ((start + next_offset) < limit)
-        //       << std::endl;
-        // }
+        uint64_t decoded_value = DecodeFixed64(value.data());
+        int decoded_value_int = (int) decoded_value;
+        bool filter_result = false;
+        switch (ctx._op) {
+          case ruda::EQ:
+            filter_result = decoded_value_int == ctx._pivot;
+            break;
+          case ruda::LESS:
+            filter_result = decoded_value_int < ctx._pivot;
+            break;
+          case ruda::GREATER:
+            filter_result = decoded_value_int > ctx._pivot;
+            break;
+          case ruda::LESS_EQ:
+            filter_result = decoded_value_int <= ctx._pivot;
+            break;
+          case ruda::GREATER_EQ:
+            filter_result = decoded_value_int >= ctx._pivot;
+            break;
+          default:
+            break;
+        }
+        if (filter_result) {
+          keys.emplace_back(std::move(key));
+          values.emplace_back(std::move(value));
+        }
+
         subblock = start + next_offset;
-        count++;
       }
     }
   }
@@ -328,7 +348,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
 	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 100000;
+  uint64_t kNumKeys = 100000000;// 10000000;
 	FileWrite(kNumKeys);
 	// FileWriteVector(kNumKeys);
   }
@@ -390,23 +410,49 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 // }
 
 TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
+  std::chrono::high_resolution_clock::time_point begin, end;
+
   options_.comparator = test::Uint64Comparator();
   std::vector<char> data;
   std::vector<uint64_t> seek_indices;
   size_t results_count;
+  begin = std::chrono::high_resolution_clock::now();
   GetDataBlocks(data, seek_indices, results_count);
-  DecodeDataBlocksOnCpu(data, seek_indices);
+  end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<float, std::milli> elapsed = end - begin;
+  std::cout << "[CPU][GetDataBlocks] Execution Time: " << elapsed.count()
+      << std::endl;
+  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  std::vector<Slice> keys, values;
+  begin = std::chrono::high_resolution_clock::now();
+  FilterDataBlocksOnCpu(data, seek_indices, ctx, keys, values);
+  end = std::chrono::high_resolution_clock::now();
+  elapsed = end - begin;
+  std::cout << "[CPU][DecodeDataBlocksOnCpu] Execution Time: "
+      << elapsed.count() << std::endl;
 }
 
 TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
+  std::chrono::high_resolution_clock::time_point begin, end;
+
   options_.comparator = test::Uint64Comparator();
   std::vector<char> data;
   std::vector<uint64_t> seek_indices;
   size_t results_count;
+  begin = std::chrono::high_resolution_clock::now();
   GetDataBlocks(data, seek_indices, results_count);
+  end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<float, std::milli> elapsed = end - begin;
+  std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
+      << std::endl;
   ruda::ConditionContext ctx = { ruda::EQ, 5,};
   std::vector<Slice> keys, values;
+  begin = std::chrono::high_resolution_clock::now();
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
+  end = std::chrono::high_resolution_clock::now();
+  elapsed = end - begin;
+  std::cout << "[GPU][DecodeDataBlocksOnGpu] Execution Time: "
+      << elapsed.count() << std::endl;
   // std::cout << "Filter Results" << std::endl;
   // for (size_t i = 0; i < keys.size(); ++i) {
   //   std::cout << "keys[" << DecodeFixed64(keys[i].data())

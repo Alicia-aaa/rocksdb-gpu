@@ -26,7 +26,6 @@ NVCCFLAGS += -dc -arch=sm_50
 
 # RocksDB-GPU
 CUDA_PATH = /usr/local/cuda
-
 CXXFLAGS += -mavx2
 
 # RocksDB-GPU
@@ -36,6 +35,8 @@ CXXFLAGS += -mavx2
 # RocksDB-GPU
 # CUDA_LDFLAGS for appending LDFLAGS
 CUDA_LDFLAGS = -L$(CUDA_PATH)/lib64 -lcudart -lcudadevrt
+# Hot fix for gflags linker.
+LDFLAGS += /usr/local/lib/libgflags.a
 
 # Transform parallel LOG output into something more readable.
 perl_command = perl -n \

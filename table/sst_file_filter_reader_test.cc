@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "accelerator/cuda/filter.h"
+#include "accelerator/avx/filter.h"
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
 #include "table/block.h"
@@ -329,11 +330,11 @@ class SstFileFilterReaderTest : public testing::Test {
   }
 
   virtual void SetUp() {
-	options_.comparator = test::Uint64Comparator();
-	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 1000;// 10000000;
-	FileWrite(kNumKeys);
-	// FileWriteVector(kNumKeys);
+    options_.comparator = test::Uint64Comparator();
+    // uint64_t kNumKeys = 1000000000;
+    uint64_t kNumKeys = 10000000;// 10000000;
+    FileWrite(kNumKeys);
+    // FileWriteVector(kNumKeys);
   }
 
  protected:
@@ -389,7 +390,7 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 //   FilterWithGPUVector(ctx, results);
 // }
 
-TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
+TEST_F(SstFileFilterReaderTest, FilterOnCpu) {
   std::chrono::high_resolution_clock::time_point begin, end;
 
   options_.comparator = test::Uint64Comparator();
@@ -408,11 +409,11 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
   FilterDataBlocksOnCpu(data, seek_indices, ctx, keys, values);
   end = std::chrono::high_resolution_clock::now();
   elapsed = end - begin;
-  std::cout << "[CPU][DecodeDataBlocksOnCpu] Execution Time: "
+  std::cout << "[CPU][FilterAndDecodeDataBlocksOnCpu] Execution Time: "
       << elapsed.count() << std::endl;
 }
 
-TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
+TEST_F(SstFileFilterReaderTest, FilterOnGpu) {
   std::chrono::high_resolution_clock::time_point begin, end;
 
   options_.comparator = test::Uint64Comparator();
@@ -431,12 +432,49 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
   end = std::chrono::high_resolution_clock::now();
   elapsed = end - begin;
-  std::cout << "[GPU][DecodeDataBlocksOnGpu] Execution Time: "
+  std::cout << "[GPU][FilterAndDecodeDataBlocksOnGpu] Execution Time: "
       << elapsed.count() << std::endl;
   // std::cout << "Filter Results" << std::endl;
   // for (size_t i = 0; i < keys.size(); ++i) {
   //   std::cout << "keys[" << DecodeFixed64(keys[i].data())
   //       << "] values[" << DecodeFixed64(values[i].data()) << "]"
+  //       << std::endl;
+  // }
+}
+
+TEST_F(SstFileFilterReaderTest, FilterOnAvx) {
+  std::chrono::high_resolution_clock::time_point begin, end;
+
+  std::vector<int> values, results;
+  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+
+  options_.comparator = test::Uint64Comparator();
+
+  begin = std::chrono::high_resolution_clock::now();
+  ReadOptions ropts;
+  SstFileFilterReader reader(options_);
+  reader.Open(sst_name_);
+  reader.VerifyChecksum();
+  std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    values.emplace_back(atoi(iter->value().data()));
+  }
+  end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<float, std::milli> elapsed = end - begin;
+  std::cout << "[AVX][GetValuesFromSST] Execution Time: " << elapsed.count()
+      << std::endl;
+
+  begin = std::chrono::high_resolution_clock::now();
+  avx::simpleIntFilter(values, ctx, results);
+  end = std::chrono::high_resolution_clock::now();
+  elapsed = end - begin;
+  std::cout << "[AVX][FilterValuesFromSST] Execution Time: "
+      << elapsed.count() << std::endl;
+
+  // std::cout << "Filter Results" << std::endl;
+  // for (size_t i = 0; i < values.size(); ++i) {
+  //   std::cout << "values[" << values[i]
+  //       << "] results[" << results[i] << "]"
   //       << std::endl;
   // }
 }

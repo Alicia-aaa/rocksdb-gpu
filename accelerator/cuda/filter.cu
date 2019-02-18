@@ -292,20 +292,20 @@ void kernel::rudaIntFilterKernel(accelerator::FilterContext *context, int *value
   }
 }
 
-int sstIntFilter(const std::vector<int> &values,
-                 const accelerator::FilterContext context,
-                 std::vector<int> &results) {
+int sstThrustFilter(const std::vector<int> &values,
+                    const accelerator::FilterContext context,
+                    std::vector<int> &results) {
   rocksdb::BlockContents block;
-  // std::cout << "[RUDA][sstIntFilter] Start" << std::endl;
+  // std::cout << "[RUDA][sstThrustFilter] Start" << std::endl;
   results.resize(values.size());
 
-  // std::cout << "[sstIntFilter] Inputs" << std::endl;
-  // std::cout << "[sstIntFilter] Inputs - values" << std::endl;
+  // std::cout << "[sstThrustFilter] Inputs" << std::endl;
+  // std::cout << "[sstThrustFilter] Inputs - values" << std::endl;
   // for (int i = 0; i < values.size(); ++i) {
     // std::cout << values[i] << " ";
   // }
   // std::cout << std::endl;
-  // std::cout << "[sstIntFilter] Inputs - context: " << context.toString()
+  // std::cout << "[sstThrustFilter] Inputs - context: " << context.toString()
       // << std::endl;
 
   thrust::device_vector<int> d_values(values);
@@ -315,15 +315,15 @@ int sstIntFilter(const std::vector<int> &values,
   thrust::transform(d_values.begin(), d_values.end(), d_results.begin(),
                     rudaTrans);
 
-  // std::cout << "[sstIntFilter] Results" << std::endl;
-  // std::cout << "[sstIntFilter] Results - d_results" << std::endl;
+  // std::cout << "[sstThrustFilter] Results" << std::endl;
+  // std::cout << "[sstThrustFilter] Results - d_results" << std::endl;
   // for (int i = 0; i < d_results.size(); ++i) {
     // std::cout << d_results[i] << " ";
   // }
   // std::cout << std::endl;
 
   thrust::copy(d_results.begin(), d_results.end(), results.begin());
-  // std::cout << "[sstIntFilter] Results - results" << std::endl;
+  // std::cout << "[sstThrustFilter] Results - results" << std::endl;
   // for (int i = 0; i < results.size(); ++i) {
     // std::cout << results[i] << " ";
   // }

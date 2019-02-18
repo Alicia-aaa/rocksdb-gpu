@@ -96,7 +96,7 @@ TEST_F(SstFileReaderTest, CudaSstValueFilter) {
   std::vector<int> values{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
   std::vector<int> results;
 
-  ruda::sstIntFilter(values, ctx, results);
+  ruda::sstThrustFilter(values, ctx, results);
   for (size_t i = 0; i < results.size(); ++i) {
     if (i == 4) {
       ASSERT_EQ(results[i], 1);

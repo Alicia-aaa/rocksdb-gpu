@@ -31,7 +31,7 @@ void runFilter(accelerator::FilterContext &ctx, std::vector<int> &values,
   results.clear();
 
   std::cout << "[FILTER_TEST] Run SST Filter" << std::endl;
-  ruda::sstIntFilter(values, ctx, results);
+  ruda::sstThrustFilter(values, ctx, results);
 
   // std::cout << "[FILTER_TEST] Results" << std::endl;
   // for (int result : results) {

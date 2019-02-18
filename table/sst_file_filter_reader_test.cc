@@ -200,7 +200,7 @@ class SstFileFilterReaderTest : public testing::Test {
     }
     end = clock();
     gbegin = clock();
-	ruda::sstIntFilter(values, ctx, results);
+	ruda::sstThrustFilter(values, ctx, results);
 	gend = clock();
 
 	std::cout << " [size: "<< results.size() << "]" << std::endl;
@@ -220,7 +220,7 @@ class SstFileFilterReaderTest : public testing::Test {
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     	std::vector<int> temp_values = deserializeVector(iter->value().data());
         std::vector<int> temp_results;
-    	ruda::sstIntFilter(temp_values, ctx, temp_results);
+    	ruda::sstThrustFilter(temp_values, ctx, temp_results);
     	results.insert(results.end(), temp_results.begin(), temp_results.end());
     }
     end = clock();
@@ -410,6 +410,36 @@ TEST_F(SstFileFilterReaderTest, FilterOnCpu) {
   end = std::chrono::high_resolution_clock::now();
   elapsed = end - begin;
   std::cout << "[CPU][FilterAndDecodeDataBlocksOnCpu] Execution Time: "
+      << elapsed.count() << std::endl;
+}
+
+TEST_F(SstFileFilterReaderTest, FilterOnThrust) {
+  std::chrono::high_resolution_clock::time_point begin, end;
+
+  std::vector<int> values, results;
+  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+
+  options_.comparator = test::Uint64Comparator();
+
+  begin = std::chrono::high_resolution_clock::now();
+  ReadOptions ropts;
+  SstFileFilterReader reader(options_);
+  reader.Open(sst_name_);
+  reader.VerifyChecksum();
+  std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
+  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    values.emplace_back(atoi(iter->value().data()));
+  }
+  end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<float, std::milli> elapsed = end - begin;
+  std::cout << "[THRUST][GetValuesFromSST] Execution Time: " << elapsed.count()
+      << std::endl;
+
+  begin = std::chrono::high_resolution_clock::now();
+  ruda::sstThrustFilter(values, ctx, results);
+  end = std::chrono::high_resolution_clock::now();
+  elapsed = end - begin;
+  std::cout << "[THRUST][FilterValuesFromSST] Execution Time: "
       << elapsed.count() << std::endl;
 }
 

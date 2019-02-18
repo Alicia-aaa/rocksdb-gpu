@@ -1,6 +1,6 @@
 #include <cstdio>
 
-#include "cuda/block_decoder.h"
+#include "accelerator/cuda/block_decoder.h"
 
 namespace ruda {
 
@@ -109,7 +109,7 @@ void DecodeSubDataBlocks(// Parameters
                          const char *cached_data,
                          const uint64_t cached_data_size,
                          const uint64_t start_idx, const uint64_t end_idx,
-                         ConditionContext *ctx,
+                         accelerator::FilterContext *ctx,
                          // Results
                          unsigned long long int *results_idx,
                          ruda::RudaKVPair *results) {
@@ -134,19 +134,19 @@ void DecodeSubDataBlocks(// Parameters
     uint64_t decoded_value = DecodeFixed64(value);
     bool filter_result = false;
     switch (ctx->_op) {
-      case EQ:
+      case accelerator::EQ:
         filter_result = decoded_value == ctx->_pivot;
         break;
-      case LESS:
+      case accelerator::LESS:
         filter_result = decoded_value < ctx->_pivot;
         break;
-      case GREATER:
+      case accelerator::GREATER:
         filter_result = decoded_value > ctx->_pivot;
         break;
-      case LESS_EQ:
+      case accelerator::LESS_EQ:
         filter_result = decoded_value <= ctx->_pivot;
         break;
-      case GREATER_EQ:
+      case accelerator::GREATER_EQ:
         filter_result = decoded_value >= ctx->_pivot;
         break;
       default:

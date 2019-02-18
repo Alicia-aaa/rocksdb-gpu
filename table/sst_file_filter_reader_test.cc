@@ -12,7 +12,7 @@
 #include <ctime>
 #include <time.h>
 
-#include "cuda/filter.h"
+#include "accelerator/cuda/filter.h"
 #include "rocksdb/sst_file_filter_reader.h"
 #include "rocksdb/sst_file_writer.h"
 #include "table/block.h"
@@ -62,23 +62,6 @@ std::string EncodeAsUint64(uint64_t v) {
   std::string dst;
   PutFixed64(&dst, v);
   return dst;
-}
-
-int filterPredicateCPU(const int target, ruda::ConditionContext ctx) {
-  switch (ctx._op) {
-    case 0:
-      return target == ctx._pivot ? 1 : 0;
-    case 1:
-      return target < ctx._pivot ? 1 : 0;
-    case 2:
-      return target > ctx._pivot ? 1 : 0;
-    case 3:
-      return target <= ctx._pivot ? 1 : 0;
-    case 4:
-      return target >= ctx._pivot ? 1 : 0;
-    default:
-      return 0;
-  }
 }
 
 class SstFileFilterReaderTest : public testing::Test {
@@ -149,7 +132,7 @@ class SstFileFilterReaderTest : public testing::Test {
 	  ASSERT_OK(writer.Finish());
   }
 
-  void FilterWithCPU(ruda::ConditionContext ctx, std::vector<int> &results) {
+  void FilterWithCPU(accelerator::FilterContext ctx, std::vector<int> &results) {
 	clock_t begin, end;
 	clock_t cbegin, cend;
 
@@ -167,7 +150,7 @@ class SstFileFilterReaderTest : public testing::Test {
     end = clock();
     cbegin = clock();
     for(unsigned int j = 0; j < temp.size(); j++) {
-	   results.emplace_back(filterPredicateCPU(temp[j], ctx));
+	   results.emplace_back(ctx(temp[j]));
     }
     cend = clock();
     std::cout << " [size : " << results.size() << "]" << std::endl;
@@ -177,7 +160,7 @@ class SstFileFilterReaderTest : public testing::Test {
 
   }
 
-  void FilterWithCPUVector(ruda::ConditionContext ctx, std::vector<int> &results) {
+  void FilterWithCPUVector(accelerator::FilterContext ctx, std::vector<int> &results) {
 	clock_t begin, end;
 
 	ReadOptions ropts;
@@ -190,7 +173,7 @@ class SstFileFilterReaderTest : public testing::Test {
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       std::vector<int> temp_values = deserializeVector(iter->value().data());
       for(unsigned int j = 0 ; j < temp_values.size(); j++) {
-    	  results.emplace_back(filterPredicateCPU(temp_values[j], ctx));
+    	  results.emplace_back(ctx(temp_values[j]));
       }
     }
     end = clock();
@@ -201,7 +184,7 @@ class SstFileFilterReaderTest : public testing::Test {
 
   }
 
-  void FilterWithGPU(ruda::ConditionContext ctx, std::vector<int> &results) {
+  void FilterWithGPU(accelerator::FilterContext ctx, std::vector<int> &results) {
 	clock_t begin, end, gbegin, gend;
 
 	ReadOptions ropts;
@@ -224,7 +207,7 @@ class SstFileFilterReaderTest : public testing::Test {
 	std::cout << " GPU filter time in GPU test(s) : " << (gend-gbegin) / CLOCKS_PER_SEC  << std::endl;
   }
 
-  void FilterWithGPUVector(ruda::ConditionContext ctx, std::vector<int> &results) {
+  void FilterWithGPUVector(accelerator::FilterContext ctx, std::vector<int> &results) {
 	clock_t begin, end;
 
 	ReadOptions ropts;
@@ -268,7 +251,7 @@ class SstFileFilterReaderTest : public testing::Test {
 
   void FilterDataBlocksOnCpu(std::vector<char>& data,
                              std::vector<uint64_t>& seek_indices,
-                             ruda::ConditionContext& ctx,
+                             accelerator::FilterContext& ctx,
                              std::vector<Slice> keys,
                              std::vector<Slice> values) {
     // Decode
@@ -303,19 +286,19 @@ class SstFileFilterReaderTest : public testing::Test {
         int decoded_value_int = (int) decoded_value;
         bool filter_result = false;
         switch (ctx._op) {
-          case ruda::EQ:
+          case accelerator::EQ:
             filter_result = decoded_value_int == ctx._pivot;
             break;
-          case ruda::LESS:
+          case accelerator::LESS:
             filter_result = decoded_value_int < ctx._pivot;
             break;
-          case ruda::GREATER:
+          case accelerator::GREATER:
             filter_result = decoded_value_int > ctx._pivot;
             break;
-          case ruda::LESS_EQ:
+          case accelerator::LESS_EQ:
             filter_result = decoded_value_int <= ctx._pivot;
             break;
-          case ruda::GREATER_EQ:
+          case accelerator::GREATER_EQ:
             filter_result = decoded_value_int >= ctx._pivot;
             break;
           default:
@@ -333,7 +316,7 @@ class SstFileFilterReaderTest : public testing::Test {
 
   void FilterDataBlocksOnGpu(const std::vector<char> &data,
                              const std::vector<uint64_t> &seek_indices,
-                             const ruda::ConditionContext &ctx,
+                             const accelerator::FilterContext &ctx,
                              const size_t results_count,
                              std::vector<Slice> &keys,
                              std::vector<Slice> &values) {
@@ -348,7 +331,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
 	options_.comparator = test::Uint64Comparator();
 	// uint64_t kNumKeys = 1000000000;
-  uint64_t kNumKeys = 100000000;// 10000000;
+  uint64_t kNumKeys = 1000;// 10000000;
 	FileWrite(kNumKeys);
 	// FileWriteVector(kNumKeys);
   }
@@ -380,33 +363,30 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
 //   options_.comparator = test::Uint64Comparator();
-//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   accelerator::FilterContext ctx = { accelerator::EQ, 5,};
 //   std::vector<int> results;
 //   FilterWithCPU(ctx, results);
-
 // }
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
 //   options_.comparator = test::Uint64Comparator();
-//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   accelerator::FilterContext ctx = { accelerator::EQ, 5,};
 //   std::vector<int> results;
 //   FilterWithCPUVector(ctx, results);
-
 // }
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithGPU) {
 //   options_.comparator = test::Uint64Comparator();
-//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   accelerator::FilterContext ctx = { accelerator::EQ, 5,};
 //   std::vector<int> results;
 //   FilterWithGPU(ctx, results);
 // }
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithGPUVector) {
 //   options_.comparator = test::Uint64Comparator();
-//   ruda::ConditionContext ctx = { ruda::EQ, 5,};
+//   accelerator::FilterContext ctx = { accelerator::EQ, 5,};
 //   std::vector<int> results;
 //   FilterWithGPUVector(ctx, results);
-
 // }
 
 TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
@@ -422,7 +402,7 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnCpu) {
   std::chrono::duration<float, std::milli> elapsed = end - begin;
   std::cout << "[CPU][GetDataBlocks] Execution Time: " << elapsed.count()
       << std::endl;
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
   std::vector<Slice> keys, values;
   begin = std::chrono::high_resolution_clock::now();
   FilterDataBlocksOnCpu(data, seek_indices, ctx, keys, values);
@@ -445,7 +425,7 @@ TEST_F(SstFileFilterReaderTest, GetDataBlocksOnGpu) {
   std::chrono::duration<float, std::milli> elapsed = end - begin;
   std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
       << std::endl;
-  ruda::ConditionContext ctx = { ruda::EQ, 5,};
+  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
   std::vector<Slice> keys, values;
   begin = std::chrono::high_resolution_clock::now();
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);

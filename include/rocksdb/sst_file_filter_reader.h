@@ -12,7 +12,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/table_properties.h"
-#include "cuda/filter.h"
+#include "accelerator/cuda/filter.h"
 
 namespace rocksdb {
 

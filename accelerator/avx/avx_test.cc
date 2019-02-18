@@ -7,7 +7,8 @@
 #include <random>
 #include <vector>
 
-#include "filter.h"
+#include "accelerator/common.h"
+#include "accelerator/avx/filter.h"
 
 int createRandomNumbers(std::vector<int> &source, const uint64_t kCount,
                         const int kMin, const int kMax) {
@@ -24,17 +25,17 @@ int createRandomNumbers(std::vector<int> &source, const uint64_t kCount,
     }
   );
 
-  return avx::AVX_OK;
+  return accelerator::ACC_OK;
 }
 
-int cpuFilter(std::vector<int> &source, avx::FilterContext ctx,
+int cpuFilter(std::vector<int> &source, accelerator::FilterContext ctx,
               std::vector<int> &results) {
   results.resize(source.size());
   for (int i = 0; i < source.size(); ++i) {
     results[i] = ctx(source[i]);
   }
 
-  return avx::AVX_OK;
+  return accelerator::ACC_OK;
 }
 
 int main() {
@@ -44,7 +45,7 @@ int main() {
     std::cout << "Disabled avx" << std::endl;
   }
 
-  avx::FilterContext ctx = { avx::LESS_EQ, 50 };
+  accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50 };
 
   const uint64_t kCount = 1000000000;
   const int kMin = 0;

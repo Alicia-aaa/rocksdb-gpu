@@ -1,12 +1,12 @@
 
-#include "filter.h"
+#include "accelerator/avx/filter.h"
 
 #include <immintrin.h>
 #include <vector>
 
 namespace avx {
 
-int simpleIntFilter(std::vector<int> &source, FilterContext ctx,
+int simpleIntFilter(std::vector<int> &source, accelerator::FilterContext ctx,
                     std::vector<int> &results) {
   results.resize(source.size());
   uint64_t pivot = static_cast<uint64_t>(ctx._pivot);
@@ -23,26 +23,26 @@ int simpleIntFilter(std::vector<int> &source, FilterContext ctx,
         source[i+5], source[i+6], source[i+7]);
     __m256i result;
     switch (ctx._op) {
-      case EQ: {
+      case accelerator::EQ: {
         result = _mm256_cmpeq_epi32(sources, pivots);
         break;
       }
-      case GREATER: {
+      case accelerator::GREATER: {
         result = _mm256_cmpgt_epi32(sources, pivots);
         break;
       }
-      case LESS: {
+      case accelerator::LESS: {
         result = _mm256_cmpgt_epi32(sources, pivots);
         result = _mm256_xor_si256(result, mask);
         break;
       }
-      case GREATER_EQ: {
+      case accelerator::GREATER_EQ: {
         __m256i greater = _mm256_cmpgt_epi32(sources, pivots);
         __m256i eq = _mm256_cmpeq_epi32(sources, pivots);
         result = _mm256_or_si256(greater, eq);
         break;
       }
-      case LESS_EQ: {
+      case accelerator::LESS_EQ: {
         __m256i greater = _mm256_cmpgt_epi32(sources, pivots);
         __m256i less = _mm256_xor_si256(greater, mask);
         __m256i eq = _mm256_cmpeq_epi32(sources, pivots);
@@ -50,7 +50,7 @@ int simpleIntFilter(std::vector<int> &source, FilterContext ctx,
         break;
       }
       default:
-        return AVX_ERR;
+        return accelerator::ACC_ERR;
     }
 
     unsigned result_mask = _mm256_movemask_epi8(result);
@@ -66,7 +66,7 @@ int simpleIntFilter(std::vector<int> &source, FilterContext ctx,
     }
   }
 
-  return AVX_OK;
+  return accelerator::ACC_OK;
 }
 
 }  // namespace avx

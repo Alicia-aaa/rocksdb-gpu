@@ -1,23 +1,20 @@
 
 /*
- * simple_filter.h
+ * common.h
  *
- *  Created on: Feb 12, 2019
+ *  Created on: Feb 18, 2019
  *      Author: totoro
  */
 
-// TODO(totoro): This file is duplicated with cuda/filter.h. Needs to move to
-// common file.
 #pragma once
 
 #include <sstream>
 #include <string>
-#include <vector>
 
-namespace avx {
+namespace accelerator {
 
-const int AVX_ERR = 1;
-const int AVX_OK = 0;
+const int ACC_ERR = 1;
+const int ACC_OK = 0;
 
 enum Operator {
   EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ,
@@ -63,7 +60,4 @@ struct FilterContext {
   }
 };
 
-int simpleIntFilter(std::vector<int> &source, FilterContext ctx,
-                    std::vector<int> &results);
-
-}  // namespace avx
+}  // namespace accelerator

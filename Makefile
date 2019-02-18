@@ -27,6 +27,8 @@ NVCCFLAGS += -dc -arch=sm_50
 # RocksDB-GPU
 CUDA_PATH = /usr/local/cuda
 
+CXXFLAGS += -mavx2
+
 # RocksDB-GPU
 # Needs to add '.cu' suffix to SUFFIXES explicitly...
 .SUFFIXES: .c .S .cc .cu .o
@@ -451,6 +453,7 @@ endif
 # RocksDB-GPU
 # Makes cuda object lists by sources.
 CUDAOBJECTS = $(CUDA_SOURCES:.cu=.o)
+AVXOBJECTS = $(AVX_SOURCES:.cc=.o)
 
 LIBOBJECTS += $(TOOL_LIB_SOURCES:.cc=.o)
 MOCKOBJECTS = $(MOCK_LIB_SOURCES:.cc=.o)
@@ -1138,14 +1141,14 @@ package:
 # ---------------------------------------------------------------------------
 # 	Unit tests and tools
 # ---------------------------------------------------------------------------
-CUDA_LIBRARY = cuda/cuda_library.o
+CUDA_LIBRARY = accelerator/cuda/cuda_library.o
 $(CUDA_LIBRARY): $(CUDAOBJECTS)
 	$(AM_NVCCLINK)
 
-$(LIBRARY): $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY)
+$(LIBRARY): $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
 	$(warning LOG....... LIBRARY exec)
 	$(AM_V_AR)rm -f $@
-	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY)
+	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
 
 $(TOOLS_LIBRARY): $(BENCH_LIB_SOURCES:.cc=.o) $(TOOL_LIB_SOURCES:.cc=.o) $(LIB_SOURCES:.cc=.o) $(TESTUTIL) $(ANALYZER_LIB_SOURCES:.cc=.o)
 	$(AM_V_AR)rm -f $@
@@ -1669,10 +1672,10 @@ range_del_aggregator_v2_test: db/range_del_aggregator_v2_test.o db/db_test_util.
 
 # RocksDB-GPU
 # Adds CUDAOBJECTS for build up cuda-related codes for test.
-sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(TESTHARNESS)
+sst_file_reader_test: table/sst_file_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
-sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(TESTHARNESS)
+sst_file_filter_reader_test: table/sst_file_filter_reader_test.o $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 #-------------------------------------------------
@@ -2059,7 +2062,7 @@ endif
 #  	Source files dependencies detection
 # ---------------------------------------------------------------------------
 
-all_sources = $(LIB_SOURCES) $(MAIN_SOURCES) $(MOCK_LIB_SOURCES) $(TOOL_LIB_SOURCES) $(BENCH_LIB_SOURCES) $(TEST_LIB_SOURCES) $(EXP_LIB_SOURCES) $(ANALYZER_LIB_SOURCES)
+all_sources = $(LIB_SOURCES) $(MAIN_SOURCES) $(MOCK_LIB_SOURCES) $(TOOL_LIB_SOURCES) $(BENCH_LIB_SOURCES) $(TEST_LIB_SOURCES) $(EXP_LIB_SOURCES) $(ANALYZER_LIB_SOURCES) $(AVX_SOURCES)
 DEPFILES = $(all_sources:.cc=.cc.d)
 CUDA_DEPFILES = $(CUDA_SOURCES:.cu=.cu.d)
 

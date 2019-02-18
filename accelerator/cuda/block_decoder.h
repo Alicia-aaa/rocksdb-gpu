@@ -11,7 +11,8 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "cuda/filter.h"
+#include "accelerator/common.h"
+#include "accelerator/cuda/filter.h"
 
 const int kMaxRudaSliceDataSize = 64;
 
@@ -144,7 +145,7 @@ void DecodeSubDataBlocks(// Parameters
                          const char *cached_data,
                          const uint64_t cached_data_size,
                          const uint64_t start_idx, const uint64_t end_idx,
-                         ConditionContext *ctx,
+                         accelerator::FilterContext *ctx,
                          // Results
                          unsigned long long int *results_idx,
                          RudaKVPair *results);

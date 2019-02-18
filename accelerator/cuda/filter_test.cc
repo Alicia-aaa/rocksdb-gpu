@@ -5,7 +5,8 @@
 #include <random>
 #include <vector>
 
-#include "filter.h"
+#include "accelerator/common.h"
+#include "accelerator/cuda/filter.h"
 
 int createRandomNumbers(std::vector<int> &values, const uint64_t kCount,
                         const int kMin, const int kMax) {
@@ -22,10 +23,10 @@ int createRandomNumbers(std::vector<int> &values, const uint64_t kCount,
     }
   );
 
-  return ruda::RUDA_OK;
+  return accelerator::ACC_OK;
 }
 
-void runFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
+void runFilter(accelerator::FilterContext &ctx, std::vector<int> &values,
                std::vector<int> &results) {
   results.clear();
 
@@ -39,7 +40,7 @@ void runFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
   // std::cout << std::endl;
 }
 
-void runNativeFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
+void runNativeFilter(accelerator::FilterContext &ctx, std::vector<int> &values,
                      std::vector<int> &results) {
   results.clear();
 
@@ -53,7 +54,7 @@ void runNativeFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
   // std::cout << std::endl;
 }
 
-void runCpuFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
+void runCpuFilter(accelerator::FilterContext &ctx, std::vector<int> &values,
                   std::vector<int> &results) {
   results.clear();
   std::transform(
@@ -79,7 +80,7 @@ void runCpuFilter(ruda::ConditionContext &ctx, std::vector<int> &values,
 
 int main() {
   std::cout << "[FILTER_TEST] Starts" << std::endl;
-  ruda::ConditionContext ctx = {
+  accelerator::FilterContext ctx = {
     ruda::LESS_EQ, 50,
   };
 

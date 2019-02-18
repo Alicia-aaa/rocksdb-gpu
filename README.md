@@ -4,6 +4,28 @@ Implements CUDA-based GPU modules on RocksDB. (Experiments)
 Basic Functions
 - Value filtering on SST files by GPU
 
+Used Compiler
+- nvcc
+
+Related Files
+- Makefile
+- cuda/
+- table/sst_file_filter_reader.cc
+- table/sst_file_filter_reader_test.cc
+
+## RocksDB-AVX: AVX-Accelerated RocksDB
+Implements Intel-AVX modules on RocksDB. (Experiments)
+
+Basic Functions
+- Value filtering on SST files by AVX
+
+Used Compiler
+- icpc
+
+Related Files
+- Makefile (Not yet)
+- avx/
+
 ## RocksDB: A Persistent Key-Value Store for Flash and RAM Storage
 
 [![Linux/Mac Build Status](https://travis-ci.org/facebook/rocksdb.svg?branch=master)](https://travis-ci.org/facebook/rocksdb)

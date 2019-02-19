@@ -1,15 +1,8 @@
 
-
-#include <algorithm>
 #include <cstdio>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <vector>
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-#include <thrust/transform.h>
-#include <thrust/functional.h>
 
 #include "accelerator/cuda/block_decoder.h"
 #include "accelerator/cuda/filter.h"
@@ -26,52 +19,24 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 }
 
 namespace ruda {
-
 namespace kernel {
-  // Kernels
-  __global__
-  void rudaIntBlockFilterKernel(// Parameters (ReadOnly)
-                                size_t kSize, size_t dataSize,
-                                size_t resultsCount, char *data,
-                                uint64_t *seek_indices,
-                                accelerator::FilterContext *ctx,
-                                uint64_t *block_seek_start_indices,
-                                // Variables
-                                unsigned long long int *results_idx,
-                                // Results
-                                RudaKVPair *results);
-  __global__
-  void rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources);
-  __global__
-  void rudaIntFilterKernel(accelerator::FilterContext *context, int *values,
-                           int *results);
+
+// Kernels
+__global__
+void rudaIntBlockFilterKernel(// Parameters (ReadOnly)
+                              size_t kSize, size_t dataSize,
+                              size_t resultsCount, char *data,
+                              uint64_t *seek_indices,
+                              accelerator::FilterContext *ctx,
+                              uint64_t *block_seek_start_indices,
+                              // Variables
+                              unsigned long long int *results_idx,
+                              // Results
+                              RudaKVPair *results);
+__global__
+void rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources);
+
 }  // namespace kernel
-
-struct RudaIntTransformator {
-  accelerator::FilterContext _context;
-
-  RudaIntTransformator(accelerator::FilterContext context) {
-    this->_context = context;
-  }
-
-  __host__ __device__
-  int operator()(const int target) const {
-    switch (this->_context._op) {
-      case accelerator::EQ:
-        return target == this->_context._pivot ? 1 : 0;
-      case accelerator::LESS:
-        return target < this->_context._pivot ? 1 : 0;
-      case accelerator::GREATER:
-        return target > this->_context._pivot ? 1 : 0;
-      case accelerator::LESS_EQ:
-        return target <= this->_context._pivot ? 1 : 0;
-      case accelerator::GREATER_EQ:
-        return target >= this->_context._pivot ? 1 : 0;
-      default:
-        return 0;
-    }
-  }
-};
 
 struct RudaBlockFilterContext {
   // Parameters
@@ -131,6 +96,11 @@ struct RudaBlockFilterContext {
   void populateParametersToCuda(const std::vector<char> &datablocks,
                                 const std::vector<uint64_t> &seek_indices,
                                 const accelerator::FilterContext &cond_ctx) {
+    // Register as a Pinned Memory
+    // cudaHostRegister(&datablocks[0], sizeof(char) * datablocks.size());
+    // cudaHostRegister(&seek_indices[0], sizeof(uint64_t) * seek_indices.size());
+    // cudaHostRegister(&cond_ctx, sizeof(accelerator::FilterContext));
+
     // Cuda Parameters
     cudaCheckError(cudaMalloc(
         (void **) &d_datablocks, sizeof(char) * datablocks.size()));
@@ -159,6 +129,11 @@ struct RudaBlockFilterContext {
         cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemset(
         d_results_idx, 0, sizeof(unsigned long long int)));
+
+    // Unregister as a Pinned Memory
+    // cudaHostUnregister(&datablocks[0]);
+    // cudaHostUnregister(&seek_indices[0]);
+    // cudaHostUnregister(&cond_ctx);
   }
 
   void populateResultsFromCuda() {
@@ -265,106 +240,6 @@ void kernel::rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources) {
 
   sources[i].populateDataFromHeap();
   delete sources[i].heap_data_;
-}
-
-__global__
-void kernel::rudaIntFilterKernel(accelerator::FilterContext *context, int *values,
-                                 int *results) {
-  int index = blockDim.x * blockIdx.x + threadIdx.x;
-  switch (context->_op) {
-    case accelerator::EQ:
-      results[index] = values[index] == context->_pivot ? 1 : 0;
-      break;
-    case accelerator::LESS:
-      results[index] = values[index] < context->_pivot ? 1 : 0;
-      break;
-    case accelerator::GREATER:
-      results[index] = values[index] > context->_pivot ? 1 : 0;
-      break;
-    case accelerator::LESS_EQ:
-      results[index] = values[index] <= context->_pivot ? 1 : 0;
-      break;
-    case accelerator::GREATER_EQ:
-      results[index] = values[index] >= context->_pivot ? 1 : 0;
-      break;
-    default:
-      break;
-  }
-}
-
-int sstThrustFilter(const std::vector<int> &values,
-                    const accelerator::FilterContext context,
-                    std::vector<int> &results) {
-  rocksdb::BlockContents block;
-  // std::cout << "[RUDA][sstThrustFilter] Start" << std::endl;
-  results.resize(values.size());
-
-  // std::cout << "[sstThrustFilter] Inputs" << std::endl;
-  // std::cout << "[sstThrustFilter] Inputs - values" << std::endl;
-  // for (int i = 0; i < values.size(); ++i) {
-    // std::cout << values[i] << " ";
-  // }
-  // std::cout << std::endl;
-  // std::cout << "[sstThrustFilter] Inputs - context: " << context.toString()
-      // << std::endl;
-
-  thrust::device_vector<int> d_values(values);
-  thrust::device_vector<int> d_results(values.size());
-
-  RudaIntTransformator rudaTrans(context);
-  thrust::transform(d_values.begin(), d_values.end(), d_results.begin(),
-                    rudaTrans);
-
-  // std::cout << "[sstThrustFilter] Results" << std::endl;
-  // std::cout << "[sstThrustFilter] Results - d_results" << std::endl;
-  // for (int i = 0; i < d_results.size(); ++i) {
-    // std::cout << d_results[i] << " ";
-  // }
-  // std::cout << std::endl;
-
-  thrust::copy(d_results.begin(), d_results.end(), results.begin());
-  // std::cout << "[sstThrustFilter] Results - results" << std::endl;
-  // for (int i = 0; i < results.size(); ++i) {
-    // std::cout << results[i] << " ";
-  // }
-  // std::cout << std::endl;
-
-  return accelerator::ACC_OK;
-}
-
-int sstIntNativeFilter(const std::vector<int> &values,
-                       const accelerator::FilterContext context,
-                       std::vector<int> &results) {
-  int *d_values, *d_results;
-  int *h_results;
-  accelerator::FilterContext *d_context;
-  const int kSize = values.size();
-  const int kBlockSize = 256;
-  const float kGridSize = ceil((float) kSize / (float) kBlockSize);
-
-  h_results = (int *) malloc(sizeof(int) * kSize);
-
-  cudaMalloc((void **) &d_values, sizeof(int) * kSize);
-  cudaMalloc((void **) &d_context, sizeof(accelerator::FilterContext));
-  cudaMalloc((void **) &d_results, sizeof(int) * kSize);
-
-  cudaMemcpy(d_values, &values[0], sizeof(int) * kSize, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_context, &context, sizeof(accelerator::FilterContext),
-             cudaMemcpyHostToDevice);
-
-  kernel::rudaIntFilterKernel<<<kGridSize, kBlockSize>>>(
-      d_context, d_values, d_results);
-
-  cudaMemcpy(h_results, d_results, sizeof(int) * kSize, cudaMemcpyDeviceToHost);
-
-  cudaFree(d_values);
-  cudaFree(d_context);
-  cudaFree(d_results);
-
-  results.assign(h_results, h_results + kSize);
-  free(h_results);
-
-  return accelerator::ACC_OK;
 }
 
 int sstIntBlockFilter(const std::vector<char> &datablocks,

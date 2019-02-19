@@ -486,7 +486,8 @@ JNI_NATIVE_SOURCES =                                          \
 # RocksDB-GPU
 CUDA_SOURCES =          \
   accelerator/cuda/block_decoder.cu \
-  accelerator/cuda/filter.cu
+  accelerator/cuda/simple_filter.cu \
+  accelerator/cuda/block_filter.cu
 
 AVX_SOURCES =           \
   accelerator/avx/filter.cc

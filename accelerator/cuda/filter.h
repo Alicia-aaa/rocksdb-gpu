@@ -17,19 +17,21 @@
 
 namespace ruda {
 
-int sstThrustFilter(const std::vector<int> &values,
-                    const accelerator::FilterContext context,
-                    std::vector<int> &results);
-
 // Note: Not Implemented.
 int sstChunkFilter(const char *values,
                    const accelerator::FilterContext context,
                    char *results);
 
+// Simple Filter
+int sstThrustFilter(const std::vector<int> &values,
+                    const accelerator::FilterContext context,
+                    std::vector<int> &results);
+
 int sstIntNativeFilter(const std::vector<int> &values,
                        const accelerator::FilterContext context,
                        std::vector<int> &results);
 
+// Block Filter
 int sstIntBlockFilter(const std::vector<char> &datablocks,
                       const std::vector<uint64_t> &seek_indices,
                       const accelerator::FilterContext context,

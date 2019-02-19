@@ -342,6 +342,26 @@ class DB {
     return Get(options, DefaultColumnFamily(), key, value);
   }
 
+  /* GPU Accelerator */
+  virtual inline Status Get_with_GPU(const ReadOptions& options,
+                            ColumnFamilyHandle* column_family, const Slice& key,
+                            std::string* value) {
+    assert(value != nullptr);
+    PinnableSlice pinnable_val(value);
+    assert(!pinnable_val.IsPinned());
+    auto s = Get_with_GPU(options, column_family, key, &pinnable_val);
+    if (s.ok() && pinnable_val.IsPinned()) {
+      value->assign(pinnable_val.data(), pinnable_val.size());
+    }  // else value is already assigned
+    return s;
+  }
+  virtual Status Get_with_GPU(const ReadOptions& options,
+                     ColumnFamilyHandle* column_family, const Slice& key,
+                     PinnableSlice* value) = 0;
+  virtual Status Get_with_GPU(const ReadOptions& options, const Slice& key, std::string* value) {
+    return Get_with_GPU(options, DefaultColumnFamily(), key, value);
+  }
+
   // If keys[i] does not exist in the database, then the i'th returned
   // status will be one for which Status::IsNotFound() is true, and
   // (*values)[i] will be set to some arbitrary value (often ""). Otherwise,

@@ -214,6 +214,26 @@ Status TransactionBaseImpl::Get(const ReadOptions& read_options,
                                         pinnable_val);
 }
 
+Status TransactionBaseImpl::Get_with_GPU(const ReadOptions& read_options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, std::string* value) {
+  assert(value != nullptr);
+  PinnableSlice pinnable_val(value);
+  assert(!pinnable_val.IsPinned());
+  auto s = Get_with_GPU(read_options, column_family, key, &pinnable_val);
+  if (s.ok() && pinnable_val.IsPinned()) {
+    value->assign(pinnable_val.data(), pinnable_val.size());
+  }  // else value is already assigned
+  return s;
+}
+
+Status TransactionBaseImpl::Get_with_GPU(const ReadOptions& read_options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, PinnableSlice* pinnable_val) {
+  return write_batch_.GetGPUFromBatchAndDB(db_, read_options, column_family, key,
+                                        pinnable_val);
+}
+
 Status TransactionBaseImpl::GetForUpdate(const ReadOptions& read_options,
                                          ColumnFamilyHandle* column_family,
                                          const Slice& key, std::string* value,

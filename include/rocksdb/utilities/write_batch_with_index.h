@@ -206,6 +206,23 @@ class WriteBatchWithIndex : public WriteBatchBase {
   Status GetFromBatchAndDB(DB* db, const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family, const Slice& key,
                            PinnableSlice* value);
+  /*GPU Accelerator*/
+  Status GetGPUFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           const Slice& key, std::string* value);
+
+  // An overload of the above method that receives a PinnableSlice
+  Status GetGPUFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           const Slice& key, PinnableSlice* value);
+
+  Status GetGPUFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           std::string* value);
+
+  // An overload of the above method that receives a PinnableSlice
+  Status GetGPUFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           PinnableSlice* value);
+
 
   // Records the state of the batch for future calls to RollbackToSavePoint().
   // May be called multiple times to set multiple save points.
@@ -244,6 +261,10 @@ class WriteBatchWithIndex : public WriteBatchBase {
   size_t SubBatchCnt();
 
   Status GetFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           PinnableSlice* value, ReadCallback* callback);
+
+  Status GetGPUFromBatchAndDB(DB* db, const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family, const Slice& key,
                            PinnableSlice* value, ReadCallback* callback);
   struct Rep;

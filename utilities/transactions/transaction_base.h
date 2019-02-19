@@ -61,6 +61,19 @@ class TransactionBaseImpl : public Transaction {
     return Get(options, db_->DefaultColumnFamily(), key, value);
   }
 
+  /* GPU Accelerator */
+  Status Get_with_GPU(const ReadOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, std::string* value) override;
+
+  Status Get_with_GPU(const ReadOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, PinnableSlice* value) override;
+
+  Status Get_with_GPU(const ReadOptions& options, const Slice& key,
+             std::string* value) override {
+    return Get_with_GPU(options, db_->DefaultColumnFamily(), key, value);
+  }
+
+
   using Transaction::GetForUpdate;
   Status GetForUpdate(const ReadOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,

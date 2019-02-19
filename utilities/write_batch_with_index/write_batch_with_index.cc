@@ -922,6 +922,135 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(
   return s;
 }
 
+/*GPU Accelerator*/
+
+Status WriteBatchWithIndex::GetGPUFromBatchAndDB(DB* db,
+                                              const ReadOptions& read_options,
+                                              const Slice& key,
+                                              std::string* value) {
+  assert(value != nullptr);
+  PinnableSlice pinnable_val(value);
+  assert(!pinnable_val.IsPinned());
+  auto s = GetFromBatchAndDB(db, read_options, db->DefaultColumnFamily(), key,
+                             &pinnable_val);
+  if (s.ok() && pinnable_val.IsPinned()) {
+    value->assign(pinnable_val.data(), pinnable_val.size());
+  }  // else value is already assigned
+  return s;
+}
+
+Status WriteBatchWithIndex::GetGPUFromBatchAndDB(DB* db,
+                                              const ReadOptions& read_options,
+                                              const Slice& key,
+                                              PinnableSlice* pinnable_val) {
+  return GetGPUFromBatchAndDB(db, read_options, db->DefaultColumnFamily(), key,
+                           pinnable_val);
+}
+
+Status WriteBatchWithIndex::GetGPUFromBatchAndDB(DB* db,
+                                              const ReadOptions& read_options,
+                                              ColumnFamilyHandle* column_family,
+                                              const Slice& key,
+                                              std::string* value) {
+  assert(value != nullptr);
+  PinnableSlice pinnable_val(value);
+  assert(!pinnable_val.IsPinned());
+  auto s =
+      GetFromBatchAndDB(db, read_options, column_family, key, &pinnable_val);
+  if (s.ok() && pinnable_val.IsPinned()) {
+    value->assign(pinnable_val.data(), pinnable_val.size());
+  }  // else value is already assigned
+  return s;
+}
+
+Status WriteBatchWithIndex::GetGPUFromBatchAndDB(DB* db,
+                                              const ReadOptions& read_options,
+                                              ColumnFamilyHandle* column_family,
+                                              const Slice& key,
+                                              PinnableSlice* pinnable_val) {
+  return GetGPUFromBatchAndDB(db, read_options, column_family, key, pinnable_val,
+                           nullptr);
+}
+
+Status WriteBatchWithIndex::GetGPUFromBatchAndDB(
+    DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
+    const Slice& key, PinnableSlice* pinnable_val, ReadCallback* callback) {
+  Status s;
+  MergeContext merge_context;
+  const ImmutableDBOptions& immuable_db_options =
+      static_cast_with_check<DBImpl, DB>(db->GetRootDB())
+          ->immutable_db_options();
+
+  // Since the lifetime of the WriteBatch is the same as that of the transaction
+  // we cannot pin it as otherwise the returned value will not be available
+  // after the transaction finishes.
+  std::string& batch_value = *pinnable_val->GetSelf();
+  WriteBatchWithIndexInternal::Result result =
+      WriteBatchWithIndexInternal::GetFromBatch(
+          immuable_db_options, this, column_family, key, &merge_context,
+          &rep->comparator, &batch_value, rep->overwrite_key, &s);
+
+  if (result == WriteBatchWithIndexInternal::Result::kFound) {
+    pinnable_val->PinSelf();
+    return s;
+  }
+  if (result == WriteBatchWithIndexInternal::Result::kDeleted) {
+    return Status::NotFound();
+  }
+  if (result == WriteBatchWithIndexInternal::Result::kError) {
+    return s;
+  }
+  if (result == WriteBatchWithIndexInternal::Result::kMergeInProgress &&
+      rep->overwrite_key == true) {
+    // Since we've overwritten keys, we do not know what other operations are
+    // in this batch for this key, so we cannot do a Merge to compute the
+    // result.  Instead, we will simply return MergeInProgress.
+    return Status::MergeInProgress();
+  }
+
+  assert(result == WriteBatchWithIndexInternal::Result::kMergeInProgress ||
+         result == WriteBatchWithIndexInternal::Result::kNotFound);
+
+  // Did not find key in batch OR could not resolve Merges.  Try DB.
+  if (!callback) {
+    s = db->Get_with_GPU(read_options, column_family, key, pinnable_val);
+  } else {
+    s = static_cast_with_check<DBImpl, DB>(db->GetRootDB())
+            ->GetImpl(read_options, column_family, key, pinnable_val, nullptr,
+                      callback);
+  }
+
+  if (s.ok() || s.IsNotFound()) {  // DB Get Succeeded
+    if (result == WriteBatchWithIndexInternal::Result::kMergeInProgress) {
+      // Merge result from DB with merges in Batch
+      auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
+      const MergeOperator* merge_operator =
+          cfh->cfd()->ioptions()->merge_operator;
+      Statistics* statistics = immuable_db_options.statistics.get();
+      Env* env = immuable_db_options.env;
+      Logger* logger = immuable_db_options.info_log.get();
+
+      Slice* merge_data;
+      if (s.ok()) {
+        merge_data = pinnable_val;
+      } else {  // Key not present in db (s.IsNotFound())
+        merge_data = nullptr;
+      }
+
+      if (merge_operator) {
+        s = MergeHelper::TimedFullMerge(
+            merge_operator, key, merge_data, merge_context.GetOperands(),
+            pinnable_val->GetSelf(), logger, statistics, env);
+        pinnable_val->PinSelf();
+      } else {
+        s = Status::InvalidArgument("Options::merge_operator must be set");
+      }
+    }
+  }
+
+  return s;
+}
+
 void WriteBatchWithIndex::SetSavePoint() { rep->write_batch.SetSavePoint(); }
 
 Status WriteBatchWithIndex::RollbackToSavePoint() {

@@ -1,4 +1,4 @@
-#include <cstdio>
+#include <cooperative_groups.h>
 
 #include "accelerator/cuda/block_decoder.h"
 
@@ -102,6 +102,16 @@ uint64_t DecodeFixed64(const char* ptr) {
   uint64_t lo = DecodeFixed32(ptr);
   uint64_t hi = DecodeFixed32(ptr + 4);
   return (hi << 32) | lo;
+}
+
+__device__
+unsigned long long int atomicAggInc(unsigned long long int *counter) {
+  auto g = cooperative_groups::coalesced_threads();
+  unsigned long long int warp_res;
+  if (g.thread_rank() == 0) {
+    warp_res = atomicAdd(counter, g.size());
+  }
+  return g.shfl(warp_res, 0) + g.thread_rank();
 }
 
 __device__

@@ -39,4 +39,11 @@ int sstIntBlockFilter(const std::vector<char> &datablocks,
                       std::vector<rocksdb::Slice> &keys,
                       std::vector<rocksdb::Slice> &values);
 
+int sstStreamIntBlockFilter(std::vector<char> &datablocks,
+                            std::vector<uint64_t> &seek_indices,
+                            const accelerator::FilterContext context,
+                            const size_t max_results_count,
+                            std::vector<rocksdb::Slice> &keys,
+                            std::vector<rocksdb::Slice> &values);
+
 }  // namespace ruda

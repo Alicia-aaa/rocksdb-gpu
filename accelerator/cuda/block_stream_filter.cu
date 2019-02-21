@@ -153,12 +153,13 @@ struct RudaBlockStreamContext {
                       const std::vector<uint64_t> &seek_indices,
                       char *d_datablocks, uint64_t *d_seek_indices) {
     // cudaCheckError(cudaMemcpyAsync(
-    //     &d_datablocks[start_datablocks], &datablocks[start_datablocks],
-    //     sizeof(char) * size_datablocks, cudaMemcpyHostToDevice,
+    //     &d_datablocks[datablocks_start_offset],
+    //     &datablocks[datablocks_start_offset],
+    //     sizeof(char) * datablocks_size, cudaMemcpyHostToDevice,
     //     stream));
     // cudaCheckError(cudaMemcpyAsync(
-    //     &d_seek_indices[start], &seek_indices[start],
-    //     sizeof(uint64_t) * size, cudaMemcpyHostToDevice,
+    //     &d_seek_indices[seek_start_offset], &seek_indices[seek_start_offset],
+    //     sizeof(uint64_t) * seek_size, cudaMemcpyHostToDevice,
     //     stream));
     // cudaCheckError(cudaMemcpyAsync(
     //     d_gpu_block_seek_starts, gpu_block_seek_starts,
@@ -177,8 +178,8 @@ struct RudaBlockStreamManager {
 
   // Cuda Kernel Parameters - stream
   int kStreamCount = 0;
-  int kStreamSize = 0;
-  int kGridSizePerStream = 0;
+  int kApproxStreamSize = 0;
+  int kApproxGridSizePerStream = 0;
 
   // Streams
   std::vector<RudaBlockStreamContext> stream_ctxs;
@@ -208,12 +209,33 @@ struct RudaBlockStreamManager {
       kBlockSize = kBlockSize >> 1;
     }
     kGridSize = ceil((float) total_size / (float) kBlockSize);
-    kGridSizePerStream = ceil((float) kGridSize / (float) kStreamCount);
-    kStreamSize = kGridSizePerStream * kBlockSize;
+
+    // Stream grid pre-process
+    // ex) kSize = 672, kGridSize = 11, kBlockSize = 64, kStreamCount = 4
+    // --> kApproxGridSizePerStream = 2, kApproxStreamSize = 128
+    //
+    // Stream1   { kGridSizePerStream = 2, kStreamSize = 128 }
+    // Stream2   { kGridSizePerStream = 3, kStreamSize = 192 }
+    // Stream3   { kGridSizePerStream = 3, kStreamSize = 192 }
+    // Stream4   { kGridSizePerStream = 3, kStreamSize = 192 (actually 160) }
+    // -----Results-----
+    // <Stream1> <Stream2>    <Stream3>     <Stream4>
+    // [64][64]  [64][64][64] [64][64][64]  [64][64][32]
+    kApproxGridSizePerStream = kGridSize / kStreamCount;
+    size_t additional_grid_count = kGridSize % kStreamCount;
+    kApproxStreamSize = kApproxGridSizePerStream * kBlockSize;
     for (size_t i = 0; i < kStreamCount; ++i) {
+      size_t grid_size_per_stream, stream_size;
+      if (i >= kStreamCount - additional_grid_count) {
+        grid_size_per_stream = kApproxGridSizePerStream + 1;
+        stream_size = grid_size_per_stream * kBlockSize;
+      } else {
+        grid_size_per_stream = kApproxGridSizePerStream;
+        stream_size = kApproxStreamSize;
+      }
       stream_ctxs.emplace_back(
           kSize, kBlockSize, kGridSize, kMaxResultsCount, kStreamCount,
-          kStreamSize, kGridSizePerStream);
+          stream_size, grid_size_per_stream);
     }
   }
 
@@ -240,18 +262,18 @@ struct RudaBlockStreamManager {
   void initParams(const std::vector<char> &datablocks,
                   const std::vector<uint64_t> &seek_indices,
                   const accelerator::FilterContext &cond_ctx) {
+    uint64_t start = 0;
+    uint64_t start_datablocks = seek_indices[start];
     for (size_t i = 0; i < kStreamCount; ++i) {
       RudaBlockStreamContext &ctx = stream_ctxs[i];
-      uint64_t start = i * kStreamSize;
-      uint64_t start_datablocks = seek_indices[start];
 
       uint64_t size, size_datablocks;
-      if (i < kStreamCount - 1) {
-        size = kStreamSize;
-        size_datablocks = seek_indices[start + size] - start_datablocks;
-      } else {
+      if (i == kStreamCount - 1) {
         size = kSize - start;
         size_datablocks = datablocks.size() - start_datablocks;
+      } else {
+        size = ctx.kStreamSize;
+        size_datablocks = seek_indices[start + size] - start_datablocks;
       }
 
       // Copies sources to GPU (datablocks, seek_indices)
@@ -259,6 +281,10 @@ struct RudaBlockStreamManager {
       ctx.initParams(
           datablocks, seek_indices, start, size, start_datablocks,
           size_datablocks);
+
+      start += ctx.kStreamSize;
+      if (start >= kSize) break;
+      start_datablocks = seek_indices[start];
     }
   }
 
@@ -385,9 +411,11 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
       << "kSize: " << block_stream_mgr.kSize << std::endl
       << "kGridSize: " << block_stream_mgr.kGridSize << std::endl
       << "kBlockSize: " << block_stream_mgr.kBlockSize << std::endl
-      << "kGridSizePerStream: " << block_stream_mgr.kGridSizePerStream << std::endl
       << "kStreamCount: " << block_stream_mgr.kStreamCount << std::endl
-      << "kStreamSize: " << block_stream_mgr.kStreamSize << std::endl
+      << "kApproxGridSizePerStream: "
+          << block_stream_mgr.kApproxGridSizePerStream << std::endl
+      << "kApproxStreamSize: "
+          << block_stream_mgr.kApproxStreamSize << std::endl
       << "DataSize: " << datablocks.size() << std::endl
       << "Max Results Count: " << block_stream_mgr.kMaxResultsCount << std::endl
       << "======================" << std::endl;
@@ -396,6 +424,8 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
   for (size_t i = 0; i < block_stream_mgr.kStreamCount; ++i) {
     RudaBlockStreamContext &ctx = block_stream_mgr.stream_ctxs[i];
     std::cout << "Stream: " << i << std::endl
+        << "kStreamSize: " << ctx.kStreamSize << std::endl
+        << "kGridSizePerStream: " << ctx.kGridSizePerStream << std::endl
         << "Start Offset: " << ctx.seek_start_offset << std::endl
         << "Size: " << ctx.seek_size << std::endl
         << "Start DataBlocks: " << ctx.datablocks_start_offset << std::endl
@@ -408,9 +438,9 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
     }
     std::cout << "-----------" << std::endl;
   }
+  // block_stream_mgr.registerPinnedMemory(datablocks, seek_indices, context);
   // block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
-
-  cudaDeviceSynchronize();
+  // block_stream_mgr.unregisterPinnedMemory(datablocks, seek_indices, context);
   // block_stream_mgr.clear();
 
   // cudaCheckError(cudaDeviceSetLimit(

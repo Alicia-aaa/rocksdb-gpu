@@ -355,9 +355,9 @@ class DB {
     }  // else value is already assigned
     return s;
   }
-  virtual Status Get_with_GPU(const ReadOptions& options,
-                     ColumnFamilyHandle* column_family, const Slice& key,
-                     PinnableSlice* value) = 0;
+  virtual Status Get_with_GPU(const ReadOptions& /*options*/,
+                     ColumnFamilyHandle* /*column_family*/, const Slice& /*key*/,
+                     PinnableSlice* /*value*/) {Status s; return s;};
   virtual Status Get_with_GPU(const ReadOptions& options, const Slice& key, std::string* value) {
     return Get_with_GPU(options, DefaultColumnFamily(), key, value);
   }

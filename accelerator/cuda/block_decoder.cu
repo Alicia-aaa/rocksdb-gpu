@@ -164,6 +164,7 @@ void DecodeSubDataBlocks(// Parameters
     }
     if (filter_result) {
       unsigned long long int idx = atomicAdd(results_idx, 1);
+      results[idx] = RudaKVPair();
       results[idx].key()->copyToStack(key, key_size);
       results[idx].value()->copyToStack(value, value_size);
     }

@@ -107,6 +107,7 @@ class RudaSlice {
   // Change this slice to refer to an empty array
   __host__ __device__
   void clear() {
+    mode_ = RudaSliceMode::STACK;
     heap_data_ = nullptr;
     data_ = nullptr;
     memset(stack_data_, 0, sizeof(char) * kMaxRudaSliceDataSize);
@@ -128,6 +129,12 @@ class RudaKVPair {
  public:
   __host__ __device__
   RudaKVPair() : key_(RudaSlice()), value_(RudaSlice()) {}
+
+  __host__ __device__
+  void clear() {
+    key_.clear();
+    value_.clear();
+  }
 
   __host__ __device__
   RudaSlice* key() { return &key_; }

@@ -69,24 +69,6 @@ struct RudaBlockStreamContext {
         sizeof(uint64_t) * kGridSizePerStream));
   }
 
-  void freeCudaObjects() {
-    cudaCheckError( cudaFree(d_gpu_block_seek_starts) );
-  }
-
-  void initializeStream() {
-    cudaCheckError( cudaStreamCreate(&stream) );
-  }
-
-  void destroyStream() {
-    cudaCheckError( cudaStreamDestroy(stream) );
-  }
-
-  void clear() {
-    freeCudaObjects();
-    destroyStream();
-    cudaCheckError( cudaFreeHost(gpu_block_seek_starts) );
-  }
-
   void cudaMallocGpuBlockSeekStarts() {
     cudaCheckError(cudaMalloc(
         (void **) &d_gpu_block_seek_starts,
@@ -152,19 +134,60 @@ struct RudaBlockStreamContext {
   void populateToCuda(const std::vector<char> &datablocks,
                       const std::vector<uint64_t> &seek_indices,
                       char *d_datablocks, uint64_t *d_seek_indices) {
-    // cudaCheckError(cudaMemcpyAsync(
-    //     &d_datablocks[datablocks_start_offset],
-    //     &datablocks[datablocks_start_offset],
-    //     sizeof(char) * datablocks_size, cudaMemcpyHostToDevice,
-    //     stream));
-    // cudaCheckError(cudaMemcpyAsync(
-    //     &d_seek_indices[seek_start_offset], &seek_indices[seek_start_offset],
-    //     sizeof(uint64_t) * seek_size, cudaMemcpyHostToDevice,
-    //     stream));
-    // cudaCheckError(cudaMemcpyAsync(
-    //     d_gpu_block_seek_starts, gpu_block_seek_starts,
-    //     sizeof(uint64_t) * kGridSizePerStream, cudaMemcpyHostToDevice,
-    //     stream));
+    cudaCheckError(cudaMemcpyAsync(
+        &d_datablocks[datablocks_start_offset],
+        &datablocks[datablocks_start_offset],
+        sizeof(char) * datablocks_size, cudaMemcpyHostToDevice,
+        stream));
+    cudaCheckError(cudaMemcpyAsync(
+        &d_seek_indices[seek_start_offset], &seek_indices[seek_start_offset],
+        sizeof(uint64_t) * seek_size, cudaMemcpyHostToDevice,
+        stream));
+    cudaCheckError(cudaMemcpyAsync(
+        d_gpu_block_seek_starts, gpu_block_seek_starts,
+        sizeof(uint64_t) * kGridSizePerStream, cudaMemcpyHostToDevice,
+        stream));
+  }
+
+  void executeKernel(// Kernel Parameter
+                     size_t kTotalDataSize,
+                     // Sources
+                     char *d_datablocks, uint64_t *d_seek_indices,
+                     accelerator::FilterContext *d_cond_ctx,
+                     // Variables
+                     unsigned long long int *d_results_idx,
+                     // Results
+                     RudaKVPair *d_results) {
+    kernel::rudaStreamIntBlockFilterKernel<<<kGridSizePerStream,
+                                             kBlockSize,
+                                             kMaxCacheSize,
+                                             stream>>>(
+      seek_start_offset, kSize, kTotalDataSize, kMaxResultsCount,
+      d_datablocks, d_seek_indices, d_cond_ctx, d_gpu_block_seek_starts,
+      d_results_idx, d_results
+    );
+  }
+
+  void copyFromCuda() {
+    // TODO(totoro): Implements copy 'd_results' to 'h_results'.
+  }
+
+  void freeCudaObjects() {
+    cudaCheckError( cudaFree(d_gpu_block_seek_starts) );
+  }
+
+  void initializeStream() {
+    cudaCheckError( cudaStreamCreate(&stream) );
+  }
+
+  void destroyStream() {
+    cudaCheckError( cudaStreamDestroy(stream) );
+  }
+
+  void clear() {
+    freeCudaObjects();
+    destroyStream();
+    cudaCheckError( cudaFreeHost(gpu_block_seek_starts) );
   }
 };
 
@@ -204,6 +227,7 @@ struct RudaBlockStreamManager {
     kSize = total_size;
     kBlockSize = block_size;
     kStreamCount = stream_count;
+    kMaxResultsCount = max_results_count;
     size_t threads_per_stream = ceil((float) total_size / (float) stream_count);
     while (threads_per_stream <= kBlockSize && kBlockSize != 4) {
       kBlockSize = kBlockSize >> 1;
@@ -326,6 +350,24 @@ struct RudaBlockStreamManager {
     }
   }
 
+  void executeKernels(size_t kTotalDataSize) {
+    for (RudaBlockStreamContext &ctx : stream_ctxs) {
+      ctx.executeKernel(
+          // Parameters
+          kTotalDataSize,
+          // Sources
+          d_datablocks, d_seek_indices, d_cond_ctx,
+          // Variables
+          d_results_idx,
+          // Results
+          d_results);
+    }
+  }
+
+  void copyFromCuda() {
+    // TODO(totoro): Implements call 'ctx.copyFromCuda(h_results, d_results, d_results_idx)'.
+  }
+
   void freeCudaObjects() {
     cudaCheckError( cudaFree(d_datablocks) );
     cudaCheckError( cudaFree(d_seek_indices) );
@@ -438,10 +480,13 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
     }
     std::cout << "-----------" << std::endl;
   }
-  // block_stream_mgr.registerPinnedMemory(datablocks, seek_indices, context);
-  // block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
-  // block_stream_mgr.unregisterPinnedMemory(datablocks, seek_indices, context);
-  // block_stream_mgr.clear();
+
+  block_stream_mgr.registerPinnedMemory(datablocks, seek_indices, context);
+  block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
+  block_stream_mgr.executeKernels(datablocks.size());
+  // block_stream_mgr.copyFromCuda();
+  block_stream_mgr.unregisterPinnedMemory(datablocks, seek_indices, context);
+  block_stream_mgr.clear();
 
   // cudaCheckError(cudaDeviceSetLimit(
   //     cudaLimitMallocHeapSize, 100 * sizeof(char) * datablocks.size()));

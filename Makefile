@@ -22,7 +22,7 @@ STRIPFLAGS = -S -x
 NVCCFLAGS += $(EXTRA_NVCCFLAGS)
 # Enable to separate compilation.
 # https://stackoverflow.com/questions/31006581/cuda-device-unresolved-extern-function
-NVCCFLAGS += -dc -arch=sm_50
+NVCCFLAGS += -dc -arch=sm_50 --default-stream per-thread
 
 # RocksDB-GPU
 CUDA_PATH = /usr/local/cuda

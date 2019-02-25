@@ -77,7 +77,7 @@ struct DecodeEntry {
   }
 };
 
-__device__
+__host__ __device__
 uint32_t DecodeFixed32(const char* ptr) {
   // if (port::kLittleEndian) {
   //   // Load the raw bytes
@@ -91,7 +91,7 @@ uint32_t DecodeFixed32(const char* ptr) {
       | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
 }
 
-__device__
+__host__ __device__
 uint64_t DecodeFixed64(const char* ptr) {
   // if (port::kLittleEndian) {
   //   // Load the raw bytes

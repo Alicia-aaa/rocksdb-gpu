@@ -147,6 +147,9 @@ class RudaKVPair {
   RudaSlice value_; /* 128 byte */
 };
 
+__host__ __device__
+uint64_t DecodeFixed64(const char* ptr);
+
 __device__
 void DecodeSubDataBlocks(// Parameters
                          const char *cached_data,

@@ -332,7 +332,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
     options_.comparator = test::Uint64Comparator();
     // uint64_t kNumKeys = 1000000000;
-    uint64_t kNumKeys = 25000000;// 10000000;
+    uint64_t kNumKeys = 10000000; // 25000000;
     FileWrite(kNumKeys);
     // FileWriteVector(kNumKeys);
   }

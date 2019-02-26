@@ -35,7 +35,7 @@ void rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
                                     // Variables
                                     unsigned long long int *results_idx,
                                     // Results
-                                    RudaKVPair *results);
+                                    RudaKVIndexPair *results);
 }  // namespace kernel
 
 struct RudaBlockStreamContext {
@@ -54,12 +54,12 @@ struct RudaBlockStreamContext {
   const int kGridSizePerStream = 0;
 
   // Cuda Results - Device
-  RudaKVPair *d_results;                  // Filtered KV pairs
+  RudaKVIndexPair *d_results;                  // Filtered KV pairs
   unsigned long long int *d_results_idx;  // Atomic increment counter index
 
   // Cuda Results - Host
   // Total results count copied from 'd_results_idx' after kernel call...
-  RudaKVPair *h_results;
+  RudaKVIndexPair *h_results;
   unsigned long long int h_results_count;
 
   // Max cached datablocks size on same gpu block (For using SharedMemory)
@@ -89,10 +89,10 @@ struct RudaBlockStreamContext {
     total_gpu_used_memory += sizeof(unsigned long long int);
     kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
     cudaCheckError(cudaMalloc(
-        (void **) &d_results, sizeof(RudaKVPair) * kApproxResultsCount));
-    total_gpu_used_memory += sizeof(RudaKVPair) * kApproxResultsCount;
+        (void **) &d_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
+    total_gpu_used_memory += sizeof(RudaKVIndexPair) * kApproxResultsCount;
     cudaCheckError(cudaMallocHost(
-        (void **) &h_results, sizeof(RudaKVPair) * kApproxResultsCount));
+        (void **) &h_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
   }
 
   void cudaMallocGpuBlockSeekStarts() {
@@ -216,7 +216,7 @@ struct RudaBlockStreamContext {
         &h_results_count, d_results_idx, sizeof(unsigned long long int),
         cudaMemcpyDeviceToHost, stream));
     cudaCheckError(cudaMemcpyAsync(
-        h_results, d_results, sizeof(RudaKVPair) * h_results_count,
+        h_results, d_results, sizeof(RudaKVIndexPair) * h_results_count,
         cudaMemcpyDeviceToHost, stream));
   }
 
@@ -387,20 +387,9 @@ struct RudaBlockStreamManager {
 
     // Copies sources to GPU (datablocks, seek_indices)
     // Accelerated by stream-pipelining...
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
-      ctx.populateToCuda_d_results_idx();
-    }
-
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
-      ctx.populateToCuda_d_datablocks(datablocks, d_datablocks);
-    }
-
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
-      ctx.populateToCuda_d_seek_indices(seek_indices, d_seek_indices);
-    }
-
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
-      ctx.populateToCuda_d_gpu_block_seek_starts();
+    for (auto &ctx : stream_ctxs) {
+      ctx.populateToCuda(
+          datablocks, seek_indices, d_datablocks, d_seek_indices);
     }
   }
 
@@ -420,20 +409,24 @@ struct RudaBlockStreamManager {
     }
   }
 
-  void translatePairsToSlices(std::vector<rocksdb::Slice> &keys,
+  void translatePairsToSlices(std::vector<char> &datablocks,
+                              std::vector<rocksdb::Slice> &keys,
                               std::vector<rocksdb::Slice> &values) {
     for (auto &ctx : stream_ctxs) {
       cudaCheckError( cudaStreamSynchronize(ctx.stream) );
       for (size_t i = 0; i < ctx.h_results_count; ++i) {
-        RudaKVPair &result = ctx.h_results[i];
-        size_t key_size = result.key()->size_;
-        size_t value_size = result.value()->size_;
+        RudaKVIndexPair &result = ctx.h_results[i];
+        size_t key_size = result.key_index_.end_ - result.key_index_.start_;
+        size_t value_size =
+            result.value_index_.end_ - result.value_index_.start_;
         char *key = new char[key_size];
         char *value = new char[value_size];
         memcpy(
-            key, result.key()->stack_data_, sizeof(char) * key_size);
+            key, &datablocks[0] + result.key_index_.start_,
+            sizeof(char) * key_size);
         memcpy(
-            value, result.value()->stack_data_, sizeof(char) * value_size);
+            value, &datablocks[0] + result.value_index_.start_,
+            sizeof(char) * value_size);
         keys.emplace_back(key, key_size);
         values.emplace_back(value, value_size);
       }
@@ -499,7 +492,7 @@ void kernel::rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
                                             // Variables
                                             unsigned long long int *results_idx,
                                             // Results
-                                            RudaKVPair *results) {
+                                            RudaKVIndexPair *results) {
   uint64_t i = offset + blockDim.x * blockIdx.x + threadIdx.x;
 
   // Overflow kernel ptr case.
@@ -533,9 +526,9 @@ void kernel::rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
   __syncthreads();
 
   size_t size = end - start;
-  DecodeSubDataBlocks(
+  DecodeNFilterSubDataBlocks(
       // Parameters
-      cached_data, size, start, end, ctx,
+      cached_data, size, block_seek_start_index, start, end, ctx,
       // Results
       results_idx, results);
 }
@@ -549,7 +542,7 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
   RudaBlockStreamManager block_stream_mgr(
       seek_indices.size() /* kSize */,
       64 /* kBlockSize */,
-      4 /* kStreamCount */,
+      8 /* kStreamCount */,
       max_results_count);
 
   // Copy & Initializes variables from host to device.
@@ -560,13 +553,12 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
   // ----------------------------------------------
   // Cuda Stream Pipelined (Accelerate)
   block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
-  std::cout << "MB: " << MB << std::endl;
   std::cout << "Total GPU used memory: "
       << (block_stream_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
   block_stream_mgr.executeKernels(datablocks.size());
   block_stream_mgr.copyFromCuda();
   // ----------------------------------------------
-  block_stream_mgr.translatePairsToSlices(keys, values);
+  block_stream_mgr.translatePairsToSlices(datablocks, keys, values);
   block_stream_mgr.unregisterPinnedMemory(datablocks, seek_indices, context);
   block_stream_mgr.clear();
 

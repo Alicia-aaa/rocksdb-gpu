@@ -332,7 +332,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
     options_.comparator = test::Uint64Comparator();
     // uint64_t kNumKeys = 1000000000;
-    uint64_t kNumKeys = 10000000; // 25000000;
+    uint64_t kNumKeys = 100000000; // 25000000;
     FileWrite(kNumKeys);
     // FileWriteVector(kNumKeys);
   }
@@ -364,7 +364,7 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
 
 TEST_F(SstFileFilterReaderTest, FilterOnCPU) {
   options_.comparator = test::Uint64Comparator();
-  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+  accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
   std::vector<int> results;
   FilterWithCPU(ctx, results);
 }
@@ -456,7 +456,7 @@ TEST_F(SstFileFilterReaderTest, FilterOnGpu) {
   std::chrono::duration<float, std::milli> elapsed = end - begin;
   std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
       << std::endl;
-  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+  accelerator::FilterContext ctx = { accelerator::LESS, 50,};
   std::vector<Slice> keys, values;
   begin = std::chrono::high_resolution_clock::now();
   FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
@@ -476,7 +476,7 @@ TEST_F(SstFileFilterReaderTest, FilterOnAvx) {
   std::chrono::high_resolution_clock::time_point begin, end;
 
   std::vector<int> values, results;
-  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+  accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
 
   options_.comparator = test::Uint64Comparator();
 

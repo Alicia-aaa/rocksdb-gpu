@@ -1,4 +1,5 @@
 
+#include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -40,6 +41,7 @@ void rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
 
 struct RudaBlockStreamContext {
   cudaStream_t stream;
+  cudaEvent_t kernel_finish_event;
 
   // Cuda Kernel Parameters
   const size_t kSize = 0;             // Total seek indices count
@@ -60,7 +62,7 @@ struct RudaBlockStreamContext {
   // Cuda Results - Host
   // Total results count copied from 'd_results_idx' after kernel call...
   RudaKVIndexPair *h_results;
-  unsigned long long int h_results_count;
+  unsigned long long int *h_results_count;
 
   // Max cached datablocks size on same gpu block (For using SharedMemory)
   size_t kMaxCacheSize = 0;
@@ -81,9 +83,9 @@ struct RudaBlockStreamContext {
       : kSize(total_size), kBlockSize(block_size), kGridSize(grid_size),
         kMaxResultsCount(max_results_count), kStreamCount(stream_count),
         kStreamSize(stream_size), kGridSizePerStream(grid_size_per_stream) {
-    cudaCheckError(cudaMallocHost(
-        (void **) &gpu_block_seek_starts,
-        sizeof(uint64_t) * kGridSizePerStream));
+    cudaCheckError(cudaHostAlloc(
+      (void **) &gpu_block_seek_starts,
+      sizeof(uint64_t) * kGridSizePerStream, cudaHostAllocMapped));
     cudaCheckError(cudaMalloc(
         (void **) &d_results_idx, sizeof(unsigned long long int)));
     total_gpu_used_memory += sizeof(unsigned long long int);
@@ -91,8 +93,13 @@ struct RudaBlockStreamContext {
     cudaCheckError(cudaMalloc(
         (void **) &d_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
     total_gpu_used_memory += sizeof(RudaKVIndexPair) * kApproxResultsCount;
-    cudaCheckError(cudaMallocHost(
-        (void **) &h_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
+    cudaCheckError(cudaHostAlloc(
+        (void **) &h_results, sizeof(RudaKVIndexPair) * kApproxResultsCount,
+        cudaHostAllocMapped));
+    cudaCheckError(cudaHostAlloc(
+        (void **) &h_results_count, sizeof(unsigned long long int),
+        cudaHostAllocMapped));
+    cudaCheckError( cudaEventCreate(&kernel_finish_event) );
   }
 
   void cudaMallocGpuBlockSeekStarts() {
@@ -209,14 +216,15 @@ struct RudaBlockStreamContext {
       d_datablocks, d_seek_indices, d_cond_ctx, d_gpu_block_seek_starts,
       d_results_idx, d_results
     );
+    cudaCheckError( cudaEventRecord(kernel_finish_event, stream) );
   }
 
   void copyFromCuda() {
     cudaCheckError(cudaMemcpyAsync(
-        &h_results_count, d_results_idx, sizeof(unsigned long long int),
+        h_results_count, d_results_idx, sizeof(unsigned long long int),
         cudaMemcpyDeviceToHost, stream));
     cudaCheckError(cudaMemcpyAsync(
-        h_results, d_results, sizeof(RudaKVIndexPair) * h_results_count,
+        h_results, d_results, sizeof(RudaKVIndexPair) * kApproxResultsCount,
         cudaMemcpyDeviceToHost, stream));
   }
 
@@ -237,8 +245,10 @@ struct RudaBlockStreamContext {
   void clear() {
     freeCudaObjects();
     destroyStream();
+    cudaCheckError( cudaEventDestroy(kernel_finish_event) );
     cudaCheckError( cudaFreeHost(gpu_block_seek_starts) );
     cudaCheckError( cudaFreeHost(h_results) );
+    cudaCheckError( cudaFreeHost(h_results_count) );
   }
 };
 
@@ -409,28 +419,63 @@ struct RudaBlockStreamManager {
     }
   }
 
+  void _translatePairsToSlices(RudaBlockStreamContext &ctx,
+                               std::vector<char> &datablocks,
+                               std::vector<rocksdb::Slice> &keys,
+                               std::vector<rocksdb::Slice> &values) {
+    unsigned long long int count = *ctx.h_results_count;
+    for (size_t i = 0; i < count; ++i) {
+      RudaKVIndexPair &result = ctx.h_results[i];
+      size_t key_size = result.key_index_.end_ - result.key_index_.start_;
+      size_t value_size =
+          result.value_index_.end_ - result.value_index_.start_;
+      char *key = new char[key_size];
+      char *value = new char[value_size];
+      memcpy(
+          key, &datablocks[0] + result.key_index_.start_,
+          sizeof(char) * key_size);
+      memcpy(
+          value, &datablocks[0] + result.value_index_.start_,
+          sizeof(char) * value_size);
+      keys.emplace_back(key, key_size);
+      values.emplace_back(value, value_size);
+    }
+  }
+
   void translatePairsToSlices(std::vector<char> &datablocks,
                               std::vector<rocksdb::Slice> &keys,
                               std::vector<rocksdb::Slice> &values) {
-    for (auto &ctx : stream_ctxs) {
-      cudaCheckError( cudaStreamSynchronize(ctx.stream) );
-      for (size_t i = 0; i < ctx.h_results_count; ++i) {
-        RudaKVIndexPair &result = ctx.h_results[i];
-        size_t key_size = result.key_index_.end_ - result.key_index_.start_;
-        size_t value_size =
-            result.value_index_.end_ - result.value_index_.start_;
-        char *key = new char[key_size];
-        char *value = new char[value_size];
-        memcpy(
-            key, &datablocks[0] + result.key_index_.start_,
-            sizeof(char) * key_size);
-        memcpy(
-            value, &datablocks[0] + result.value_index_.start_,
-            sizeof(char) * value_size);
-        keys.emplace_back(key, key_size);
-        values.emplace_back(value, value_size);
+    std::chrono::high_resolution_clock::time_point begin, end;
+
+    begin = std::chrono::high_resolution_clock::now();
+    bool *finished = new bool[kStreamCount];
+    for (size_t i = 0; i < kStreamCount; ++i) {
+      finished[i] = false;
+    }
+    while (true) {
+      bool total_finished = true;
+      for (size_t i = 0; i < kStreamCount; ++i) {
+        if (!finished[i]) {
+          total_finished = false;
+        }
+      }
+      if (total_finished) {
+        break;
+      }
+      for (size_t i = 0; i < kStreamCount; ++i) {
+        if (finished[i]) continue;
+        finished[i] =
+            cudaEventQuery(stream_ctxs[i].kernel_finish_event) == cudaSuccess;
+        if (!finished[i]) continue;
+        std::cout << "CTX TRANSLATE: " << i << std::endl;
+        _translatePairsToSlices(stream_ctxs[i], datablocks, keys, values);
       }
     }
+    delete[] finished;
+    end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float, std::milli> elapsed = end - begin;
+    std::cout << "[GPU][translatePairsToSlices] Execution Time: "
+        << elapsed.count() << std::endl;
   }
 
   void log() {
@@ -539,10 +584,17 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
                             const size_t max_results_count,
                             std::vector<rocksdb::Slice> &keys,
                             std::vector<rocksdb::Slice> &values) {
+  // Warming up
+  // Note(totoro): Because, there is a warming up latency on gpu when
+  // gpu-related function called(ex. set up gpu driver). So, we ignore this
+  // latency by just firing meaningless malloc function.
+  void *warming_up;
+  cudaCheckError(cudaMalloc(&warming_up, 0));
+
   RudaBlockStreamManager block_stream_mgr(
       seek_indices.size() /* kSize */,
       64 /* kBlockSize */,
-      8 /* kStreamCount */,
+      4 /* kStreamCount */,
       max_results_count);
 
   // Copy & Initializes variables from host to device.

@@ -134,31 +134,31 @@ class SstFileFilterReaderTest : public testing::Test {
   }
 
   void FilterWithCPU(accelerator::FilterContext ctx, std::vector<int> &results) {
-	clock_t begin, end;
-	clock_t cbegin, cend;
+    std::chrono::high_resolution_clock::time_point begin, end;
+    std::chrono::duration<float, std::milli> elapsed;
 
-	ReadOptions ropts;
+    begin = std::chrono::high_resolution_clock::now();
+    ReadOptions ropts;
     SstFileFilterReader reader(options_);
     reader.Open(sst_name_);
     reader.VerifyChecksum();
-
     std::vector<int> temp;
     std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
-    begin = clock();
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
        temp.emplace_back(atoi(iter->value().data()));
     }
-    end = clock();
-    cbegin = clock();
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - begin;
+    std::cout << "[CPU][GetValuesFromSST] Execution Time: " << elapsed.count()
+        << std::endl;
+    begin = std::chrono::high_resolution_clock::now();
     for(unsigned int j = 0; j < temp.size(); j++) {
 	   results.emplace_back(ctx(temp[j]));
     }
-    cend = clock();
-    std::cout << " [size : " << results.size() << "]" << std::endl;
-    std::cout << " CPU iteration time in CPU test(s) : " << (end - begin) / CLOCKS_PER_SEC << std::endl;
-    std::cout << " CPU filter time in CPU test(s) : " << (cend - cbegin) / CLOCKS_PER_SEC << std::endl;
-
-
+    end = std::chrono::high_resolution_clock::now();
+    elapsed = end - begin;
+    std::cout << "[CPU][FilterValuesFromSST] Execution Time: "
+        << elapsed.count() << std::endl;
   }
 
   void FilterWithCPUVector(accelerator::FilterContext ctx, std::vector<int> &results) {
@@ -332,7 +332,7 @@ class SstFileFilterReaderTest : public testing::Test {
   virtual void SetUp() {
     options_.comparator = test::Uint64Comparator();
     // uint64_t kNumKeys = 1000000000;
-    uint64_t kNumKeys = 100000000;// 10000000;
+    uint64_t kNumKeys = 25000000;// 10000000;
     FileWrite(kNumKeys);
     // FileWriteVector(kNumKeys);
   }
@@ -362,12 +362,12 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   CreateFileAndCheck(keys);
 } */
 
-// TEST_F(SstFileFilterReaderTest, FilterTestWithCPU) {
-//   options_.comparator = test::Uint64Comparator();
-//   accelerator::FilterContext ctx = { accelerator::EQ, 5,};
-//   std::vector<int> results;
-//   FilterWithCPU(ctx, results);
-// }
+TEST_F(SstFileFilterReaderTest, FilterOnCPU) {
+  options_.comparator = test::Uint64Comparator();
+  accelerator::FilterContext ctx = { accelerator::EQ, 5,};
+  std::vector<int> results;
+  FilterWithCPU(ctx, results);
+}
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
 //   options_.comparator = test::Uint64Comparator();

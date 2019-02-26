@@ -9,6 +9,10 @@
 #include "rocksdb/slice.h"
 #include "table/format.h"
 
+#define KB 1024
+#define MB 1024 * KB
+#define GB 1024 * MB
+
 #define cudaCheckError(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
                       bool abort=true) {
@@ -67,6 +71,9 @@ struct RudaBlockStreamContext {
   uint64_t *d_gpu_block_seek_starts;
   uint64_t *gpu_block_seek_starts;
 
+  // Log
+  size_t total_gpu_used_memory = 0;
+
   RudaBlockStreamContext(const size_t total_size, const int block_size,
                          const int grid_size, const size_t max_results_count,
                          const int stream_count, const int stream_size,
@@ -79,9 +86,11 @@ struct RudaBlockStreamContext {
         sizeof(uint64_t) * kGridSizePerStream));
     cudaCheckError(cudaMalloc(
         (void **) &d_results_idx, sizeof(unsigned long long int)));
+    total_gpu_used_memory += sizeof(unsigned long long int);
     kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
     cudaCheckError(cudaMalloc(
         (void **) &d_results, sizeof(RudaKVPair) * kApproxResultsCount));
+    total_gpu_used_memory += sizeof(RudaKVPair) * kApproxResultsCount;
     cudaCheckError(cudaMallocHost(
         (void **) &h_results, sizeof(RudaKVPair) * kApproxResultsCount));
   }
@@ -90,6 +99,7 @@ struct RudaBlockStreamContext {
     cudaCheckError(cudaMalloc(
         (void **) &d_gpu_block_seek_starts,
         sizeof(uint64_t) * kGridSizePerStream));
+    total_gpu_used_memory += sizeof(uint64_t) * kGridSizePerStream;
   }
 
   size_t calculateGpuBlockSeekStarts(const std::vector<char> &datablocks,
@@ -253,6 +263,9 @@ struct RudaBlockStreamManager {
   uint64_t *d_seek_indices;
   accelerator::FilterContext *d_cond_ctx;
 
+  // Log
+  size_t total_gpu_used_memory = 0;
+
   RudaBlockStreamManager(const size_t total_size, const int block_size,
                          const size_t stream_count,
                          const size_t max_results_count) {
@@ -351,12 +364,16 @@ struct RudaBlockStreamManager {
     // Cuda Parameters
     cudaCheckError(cudaMalloc(
         (void **) &d_datablocks, sizeof(char) * datablocks.size()));
+    total_gpu_used_memory += sizeof(char) * datablocks.size();
     cudaCheckError(cudaMalloc(
         (void **) &d_seek_indices, sizeof(uint64_t) * kSize));
+    total_gpu_used_memory += sizeof(uint64_t) * kSize;
     cudaCheckError(cudaMalloc(
         (void **) &d_cond_ctx, sizeof(accelerator::FilterContext)));
+    total_gpu_used_memory += sizeof(accelerator::FilterContext);
     for (RudaBlockStreamContext &ctx : stream_ctxs) {
       ctx.cudaMallocGpuBlockSeekStarts();
+      total_gpu_used_memory += ctx.total_gpu_used_memory;
     }
 
     cudaCheckError(cudaMemcpy(
@@ -543,6 +560,9 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
   // ----------------------------------------------
   // Cuda Stream Pipelined (Accelerate)
   block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
+  std::cout << "MB: " << MB << std::endl;
+  std::cout << "Total GPU used memory: "
+      << (block_stream_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
   block_stream_mgr.executeKernels(datablocks.size());
   block_stream_mgr.copyFromCuda();
   // ----------------------------------------------

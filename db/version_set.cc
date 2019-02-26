@@ -1307,6 +1307,64 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
   }
 }
 
+void Version::GetFromGPU(const ReadOptions& /*read_options*/, const LookupKey& k,
+                  std::vector<PinnableSlice> &/*value*/, Status* status,
+                  MergeContext* /*merge_context*/,
+                  SequenceNumber* max_covering_tombstone_seq, bool* /*value_found*/,
+                  bool* key_exists, SequenceNumber* /*seq*/, ReadCallback* /*callback*/,
+                  bool* /*is_blob*/) {
+  Slice ikey = k.internal_key();
+  Slice user_key = k.user_key();
+
+  assert(status->ok() || status->IsMergeInProgress());
+
+  if (key_exists != nullptr) {
+    // will falsify below if not found
+    *key_exists = true;
+  }
+
+  FilePicker fp(
+      storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
+      storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
+      user_comparator(), internal_comparator());
+  FdWithKeyRange* f = fp.GetNextFile();
+  std::vector<FdWithKeyRange *> fdlist;
+
+  while (f != nullptr) {
+    if (*max_covering_tombstone_seq > 0) {
+      // The remaining files we look at will only contain covered keys, so we
+      // stop here.
+      break;
+    }
+
+    bool timer_enabled =
+        GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
+        get_perf_context()->per_level_perf_context_enabled;
+    StopWatchNano timer(env_, timer_enabled /* auto_start */);
+    // TODO: examine the behavior for corrupted key
+    if (timer_enabled) {
+      PERF_COUNTER_BY_LEVEL_ADD(get_from_table_nanos, timer.ElapsedNanos(),
+                                fp.GetCurrentLevel());
+    }
+
+    fdlist.emplace_back(f);
+    f = fp.GetNextFile();
+  }
+
+//  *status = table_cache_->Get(
+//      read_options, *internal_comparator(), *f->file_metadata, ikey,
+//      value, mutable_cf_options_.prefix_extractor.get(),
+//      cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
+//      IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+//                      fp.IsHitFileLastInLevel()),
+//      fp.GetCurrentLevel());
+
+  if (key_exists != nullptr)
+      *key_exists = false;
+
+     *status = Status::NotFound(); // Use an empty error message for speed
+}
+
 bool Version::IsFilterSkipped(int level, bool is_file_last_in_level) {
   // Reaching the bottom level implies misses at all upper levels, so we'll
   // skip checking the filters when we predict a hit.

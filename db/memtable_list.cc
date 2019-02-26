@@ -113,6 +113,16 @@ bool MemTableListVersion::Get(const LookupKey& key, std::string* value,
                      is_blob_index);
 }
 
+bool MemTableListVersion::GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *> &value,
+                              Status* s, MergeContext* merge_context,
+                              SequenceNumber* max_covering_tombstone_seq,
+                              SequenceNumber* seq, const ReadOptions& read_opts,
+                              ReadCallback* callback, bool* is_blob_index) {
+  return GetFromListGPU(&memlist_, key, value, s, merge_context,
+                     max_covering_tombstone_seq, seq, read_opts, callback,
+                     is_blob_index);
+}
+
 bool MemTableListVersion::GetFromHistory(
     const LookupKey& key, std::string* value, Status* s,
     MergeContext* merge_context, SequenceNumber* max_covering_tombstone_seq,
@@ -134,6 +144,41 @@ bool MemTableListVersion::GetFromList(
 
     bool done =
         memtable->Get(key, value, s, merge_context, max_covering_tombstone_seq,
+                      &current_seq, read_opts, callback, is_blob_index);
+    if (*seq == kMaxSequenceNumber) {
+      // Store the most recent sequence number of any operation on this key.
+      // Since we only care about the most recent change, we only need to
+      // return the first operation found when searching memtables in
+      // reverse-chronological order.
+      // current_seq would be equal to kMaxSequenceNumber if the value was to be
+      // skipped. This allows seq to be assigned again when the next value is
+      // read.
+      *seq = current_seq;
+    }
+
+    if (done) {
+      assert(*seq != kMaxSequenceNumber || s->IsNotFound());
+      return true;
+    }
+    if (!done && !s->ok() && !s->IsMergeInProgress() && !s->IsNotFound()) {
+      return false;
+    }
+  }
+  return false;
+}
+
+bool MemTableListVersion::GetFromListGPU(
+    std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice *> &value,
+    Status* s, MergeContext* merge_context,
+    SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
+    const ReadOptions& read_opts, ReadCallback* callback, bool* is_blob_index) {
+  *seq = kMaxSequenceNumber;
+
+  for (auto& memtable : *list) {
+    SequenceNumber current_seq = kMaxSequenceNumber;
+
+    bool done =
+        memtable->GetFromGPU(key, value, s, merge_context, max_covering_tombstone_seq,
                       &current_seq, read_opts, callback, is_blob_index);
     if (*seq == kMaxSequenceNumber) {
       // Store the most recent sequence number of any operation on this key.

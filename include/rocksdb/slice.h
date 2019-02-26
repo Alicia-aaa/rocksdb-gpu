@@ -32,6 +32,33 @@
 
 namespace rocksdb {
 
+enum data_types { TYPE_DECIMAL, TYPE_TINY,
+			TYPE_SHORT,   TYPE_LONG,
+			 TYPE_FLOAT,   TYPE_DOUBLE,
+			 TYPE_NULL,    TYPE_TIMESTAMP,
+			 TYPE_LONGLONG, TYPE_INT24,
+			 TYPE_DATE,    TYPE_TIME,
+			 TYPE_DATETIME,  TYPE_YEAR,
+			 TYPE_NEWDATE,  TYPE_VARCHAR,
+			 TYPE_BIT,
+			 TYPE_TIMESTAMP2,
+			 TYPE_DATETIME2,
+			 TYPE_TIME2,
+			 TYPE_DOCUMENT,
+			 TYPE_DOCUMENT_VALUE, // Used for DOCUMENT()
+			 TYPE_DOCUMENT_UNKNOWN,
+			 TYPE_NEWDECIMAL=246,
+			 TYPE_ENUM=247,
+			 TYPE_SET=248,
+			 TYPE_TINY_BLOB=249,
+			 TYPE_MEDIUM_BLOB=250,
+			 TYPE_LONG_BLOB=251,
+			 TYPE_BLOB=252,
+			 TYPE_VAR_STRING=253,
+			 TYPE_STRING=254,
+			 TYPE_GEOMETRY=255
+};
+
 class Slice {
  public:
   // Create an empty slice.
@@ -132,7 +159,6 @@ class Slice {
  // private: make these public for rocksdbjni access
   const char* data_;
   size_t size_;
-
   // Intentionally copyable
 };
 
@@ -213,6 +239,32 @@ class PinnableSlice : public Slice, public Cleanable {
   std::string self_space_;
   std::string* buf_;
   bool pinned_ = false;
+};
+
+/* GPU Accelerator */
+class SlicewithSchema : public Slice, public Cleanable {
+ public:
+  SlicewithSchema(const char* d, size_t n, std::string filter, uint * type, uint * length)
+ : Slice(d, n) {
+	  filter_cond = filter;
+	  field_type = type;
+	  field_length = length;
+  }
+
+  // No copy constructor and copy assignment allowed.
+  SlicewithSchema(SlicewithSchema&) = delete;
+  SlicewithSchema& operator=(SlicewithSchema&) = delete;
+  uint getType(uint index) {
+	  return field_type[index - 1];
+  }
+  uint getLength(uint index) {
+	  return field_type[index - 1];
+  }
+
+ private:
+  std::string filter_cond;
+  uint * field_type;
+  uint * field_length;
 };
 
 // A set of Slices that are virtually concatenated together.  'parts' points

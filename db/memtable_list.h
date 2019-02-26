@@ -70,6 +70,23 @@ class MemTableListVersion {
                read_opts, callback, is_blob_index);
   }
 
+  /*GPU Accelerator*/
+  bool GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *> &value, Status* s,
+           MergeContext* merge_context,
+           SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
+           const ReadOptions& read_opts, ReadCallback* callback = nullptr,
+           bool* is_blob_index = nullptr);
+
+  bool GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *> &value, Status* s,
+           MergeContext* merge_context,
+           SequenceNumber* max_covering_tombstone_seq,
+           const ReadOptions& read_opts, ReadCallback* callback = nullptr,
+           bool* is_blob_index = nullptr) {
+    SequenceNumber seq;
+    return GetFromGPU(key, value, s, merge_context, max_covering_tombstone_seq, &seq,
+               read_opts, callback, is_blob_index);
+  }
+
   // Similar to Get(), but searches the Memtable history of memtables that
   // have already been flushed.  Should only be used from in-memory only
   // queries (such as Transaction validation) as the history may contain
@@ -123,6 +140,15 @@ class MemTableListVersion {
 
   bool GetFromList(std::list<MemTable*>* list, const LookupKey& key,
                    std::string* value, Status* s, MergeContext* merge_context,
+                   SequenceNumber* max_covering_tombstone_seq,
+                   SequenceNumber* seq, const ReadOptions& read_opts,
+                   ReadCallback* callback = nullptr,
+                   bool* is_blob_index = nullptr);
+
+  /*GPU Accelerator*/
+
+  bool GetFromListGPU(std::list<MemTable*>* list, const LookupKey& key,
+                   std::vector<PinnableSlice *> &value, Status* s, MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
                    SequenceNumber* seq, const ReadOptions& read_opts,
                    ReadCallback* callback = nullptr,

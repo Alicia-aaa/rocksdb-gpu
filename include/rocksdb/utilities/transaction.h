@@ -198,26 +198,7 @@ class Transaction {
 
   virtual Status Get_with_GPU(const ReadOptions& options,
                      ColumnFamilyHandle* column_family, const Slice& key,
-                     std::string* value) = 0;
-
-  virtual Status Get_with_GPU(const ReadOptions& options,
-                     ColumnFamilyHandle* column_family, const Slice& key,
-                     PinnableSlice* pinnable_val) {
-    assert(pinnable_val != nullptr);
-    auto s = Get_with_GPU(options, column_family, key, pinnable_val->GetSelf());
-    pinnable_val->PinSelf();
-    return s;
-  }
-
-  virtual Status Get_with_GPU(const ReadOptions& options, const Slice& key,
-                     std::string* value) = 0;
-  virtual Status Get_with_GPU(const ReadOptions& options, const Slice& key,
-                     PinnableSlice* pinnable_val) {
-    assert(pinnable_val != nullptr);
-    auto s = Get_with_GPU(options, key, pinnable_val->GetSelf());
-    pinnable_val->PinSelf();
-    return s;
-  }
+                     std::vector<PinnableSlice *> &pinnable_val) = 0;
 
   virtual std::vector<Status> MultiGet(
       const ReadOptions& options,

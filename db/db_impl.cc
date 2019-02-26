@@ -1209,10 +1209,10 @@ Status DBImpl::Get(const ReadOptions& read_options,
                    PinnableSlice* value) {
   return GetImpl(read_options, column_family, key, value);
 }
-
+/* GPU Accelerator */
 Status DBImpl::Get_with_GPU(const ReadOptions& read_options,
                    ColumnFamilyHandle* column_family, const Slice& key,
-                   PinnableSlice* value) {
+                   std::vector<PinnableSlice *> &value) {
   return GetImpl_GPU(read_options, column_family, key, value);
 }
 
@@ -1335,9 +1335,8 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 
 Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
                        ColumnFamilyHandle* column_family, const Slice& key,
-                       PinnableSlice* pinnable_val, bool* value_found,
+                       std::vector<PinnableSlice *> &pinnable_val, bool* /*value_found*/,
                        ReadCallback* callback, bool* is_blob_index) {
-  assert(pinnable_val != nullptr);
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
 
@@ -1407,18 +1406,18 @@ Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
                         has_unpersisted_data_.load(std::memory_order_relaxed));
   bool done = false;
   if (!skip_memtable) {
-    if (sv->mem->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
+    if (sv->mem->GetFromGPU(lkey, pinnable_val, &s, &merge_context,
                      &max_covering_tombstone_seq, read_options, callback,
                      is_blob_index)) {
       done = true;
-      pinnable_val->PinSelf();
+      //pinnable_val->PinSelf();
       RecordTick(stats_, MEMTABLE_HIT);
     } else if ((s.ok() || s.IsMergeInProgress()) &&
-               sv->imm->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
+               sv->imm->GetFromGPU(lkey, pinnable_val, &s, &merge_context,
                             &max_covering_tombstone_seq, read_options, callback,
                             is_blob_index)) {
       done = true;
-      pinnable_val->PinSelf();
+      //pinnable_val->PinSelf();
       RecordTick(stats_, MEMTABLE_HIT);
     }
     if (!done && !s.ok() && !s.IsMergeInProgress()) {
@@ -1426,13 +1425,13 @@ Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
       return s;
     }
   }
-  if (!done) {
-    PERF_TIMER_GUARD(get_from_output_files_time);
-    sv->current->Get(read_options, lkey, pinnable_val, &s, &merge_context,
-                     &max_covering_tombstone_seq, value_found, nullptr, nullptr,
-                     callback, is_blob_index);
-    RecordTick(stats_, MEMTABLE_MISS);
-  }
+//  if (!done) {
+//    PERF_TIMER_GUARD(get_from_output_files_time);
+//    sv->current->GetFromGPU(read_options, lkey, pinnable_val, &s, &merge_context,
+//                     &max_covering_tombstone_seq, value_found, nullptr, nullptr,
+//                     callback, is_blob_index);
+//    RecordTick(stats_, MEMTABLE_MISS);
+//  }
 
   {
     PERF_TIMER_GUARD(get_post_process_time);
@@ -1440,10 +1439,6 @@ Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
     ReturnAndCleanupSuperVersion(cfd, sv);
 
     RecordTick(stats_, NUMBER_KEYS_READ);
-    size_t size = pinnable_val->size();
-    RecordTick(stats_, BYTES_READ, size);
-    MeasureTime(stats_, BYTES_PER_READ, size);
-    PERF_COUNTER_ADD(get_read_bytes, size);
   }
   return s;
 }

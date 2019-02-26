@@ -572,6 +572,13 @@ class Version {
            SequenceNumber* seq = nullptr, ReadCallback* callback = nullptr,
            bool* is_blob = nullptr);
 
+  void GetFromGPU(const ReadOptions&, const LookupKey& key, std::vector<PinnableSlice> &value,
+           Status* status, MergeContext* merge_context,
+           SequenceNumber* max_covering_tombstone_seq,
+           bool* value_found = nullptr, bool* key_exists = nullptr,
+           SequenceNumber* seq = nullptr, ReadCallback* callback = nullptr,
+           bool* is_blob = nullptr);
+
   // Loads some stats information from files. Call without mutex held. It needs
   // to be called before applying the version to the version set.
   void PrepareApply(const MutableCFOptions& mutable_cf_options,

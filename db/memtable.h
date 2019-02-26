@@ -202,6 +202,22 @@ class MemTable {
     return Get(key, value, s, merge_context, max_covering_tombstone_seq, &seq,
                read_opts, callback, is_blob_index);
   }
+  /*GPU Accelerator*/
+  bool GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *>& value, Status* s,
+           MergeContext* merge_context,
+           SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
+           const ReadOptions& read_opts, ReadCallback* callback = nullptr,
+           bool* is_blob_index = nullptr);
+
+  bool GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *>& value, Status* s,
+           MergeContext* merge_context,
+           SequenceNumber* max_covering_tombstone_seq,
+           const ReadOptions& read_opts, ReadCallback* callback = nullptr,
+           bool* is_blob_index = nullptr) {
+    SequenceNumber seq;
+    return GetFromGPU(key, value, s, merge_context, max_covering_tombstone_seq, &seq,
+               read_opts, callback, is_blob_index);
+  }
 
   // Attempts to update the new_value inplace, else does normal Add
   // Pseudocode

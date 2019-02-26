@@ -117,10 +117,10 @@ class DBImpl : public DB {
   using DB::Get_with_GPU;
   virtual Status Get_with_GPU(const ReadOptions& options,
                      ColumnFamilyHandle* column_family, const Slice& key,
-                     PinnableSlice* value) override;
+                     std::vector<PinnableSlice *> &values) override;
 
   Status GetImpl_GPU(const ReadOptions& options, ColumnFamilyHandle* column_family,
-                 const Slice& key, PinnableSlice* value,
+                 const Slice& key, std::vector<PinnableSlice *> &values,
                  bool* value_found = nullptr, ReadCallback* callback = nullptr,
                  bool* is_blob_index = nullptr);
 

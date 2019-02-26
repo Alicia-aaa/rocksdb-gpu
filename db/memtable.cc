@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <iostream>
 
 #include "db/dbformat.h"
 #include "db/merge_context.h"
@@ -579,6 +580,8 @@ struct Saver {
   bool* found_final_value;  // Is value set correctly? Used by KeyMayExist
   bool* merge_in_progress;
   std::string* value;
+  /*GPU accelerator*/
+  std::vector<PinnableSlice*> * values;
   SequenceNumber seq;
   const MergeOperator* merge_operator;
   // the merge operations encountered;
@@ -730,6 +733,148 @@ static bool SaveValue(void* arg, const char* entry) {
   // s->state could be Corrupt, merge or notfound
   return false;
 }
+/*GPU Accelerator*/
+
+static bool SaveValueGPU(void* arg, const char* entry) {
+  Saver* s = reinterpret_cast<Saver*>(arg);
+  assert(s != nullptr);
+  MergeContext* merge_context = s->merge_context;
+  SequenceNumber max_covering_tombstone_seq = s->max_covering_tombstone_seq;
+  const MergeOperator* merge_operator = s->merge_operator;
+
+  assert(merge_context != nullptr);
+
+  // entry format is:
+  //    klength  varint32
+  //    userkey  char[klength-8]
+  //    tag      uint64
+  //    vlength  varint32
+  //    value    char[vlength]
+  // Check that it belongs to same user key.  We do not check the
+  // sequence number since the Seek() call above should have skipped
+  // all entries with overly large sequence numbers.
+  uint32_t key_length;
+  const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
+//  std::string temp;
+//  temp.assign(key_ptr, 4);
+//  std::cout<<"SaveValueGPU key_ptr4" << temp << std::endl;
+//  std::cout<<"SaveValueGPU is same?" << s->mem->GetInternalKeyComparator().user_comparator()->Equal(
+//          Slice(key_ptr, 4 ), s->key->user_key()) << std::endl;
+
+  if (s->mem->GetInternalKeyComparator().user_comparator()->Equal(
+		  Slice(key_ptr, 4), s->key->user_key())) {
+    // Correct user key
+    const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
+    ValueType type;
+    SequenceNumber seq;
+    UnPackSequenceAndType(tag, &seq, &type);
+    // If the value is not in the snapshot, skip it
+    if (!s->CheckCallback(seq)) {
+      return true;  // to continue to the next seq
+    }
+
+    s->seq = seq;
+
+    if ((type == kTypeValue || type == kTypeMerge || type == kTypeBlobIndex) &&
+        max_covering_tombstone_seq > seq) {
+      type = kTypeRangeDeletion;
+    }
+    switch (type) {
+      case kTypeBlobIndex:
+        if (s->is_blob_index == nullptr) {
+          ROCKS_LOG_ERROR(s->logger, "Encounter unexpected blob index.");
+          *(s->status) = Status::NotSupported(
+              "Encounter unsupported blob value. Please open DB with "
+              "rocksdb::blob_db::BlobDB instead.");
+        } else if (*(s->merge_in_progress)) {
+          *(s->status) =
+              Status::NotSupported("Blob DB does not support merge operator.");
+        }
+        if (!s->status->ok()) {
+          *(s->found_final_value) = true;
+          return true;
+        }
+        FALLTHROUGH_INTENDED;
+      case kTypeValue: {
+        if (s->inplace_update_support) {
+          s->mem->GetLock(s->key->user_key())->ReadLock();
+        }
+        Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
+        *(s->status) = Status::OK();
+        std::string* buf = new std::string("");
+        s->value = buf;
+        if (*(s->merge_in_progress)) {
+          if (s->value != nullptr) {
+            *(s->status) = MergeHelper::TimedFullMerge(
+                merge_operator, s->key->user_key(), &v,
+                merge_context->GetOperands(), s->value, s->logger,
+                s->statistics, s->env_, nullptr /* result_operand */, true);
+          }
+        } else if (s->value != nullptr) {
+          s->value->assign(v.data(), v.size());
+          PinnableSlice* pinValue = new PinnableSlice(s->value);
+          pinValue->PinSelf();
+          s->values->push_back(pinValue);
+        }
+        if (s->inplace_update_support) {
+          s->mem->GetLock(s->key->user_key())->ReadUnlock();
+        }
+        *(s->found_final_value) = true;
+        if (s->is_blob_index != nullptr) {
+          *(s->is_blob_index) = (type == kTypeBlobIndex);
+        }
+        return true;
+      }
+      case kTypeDeletion:
+      case kTypeSingleDeletion:
+      case kTypeRangeDeletion: {
+        if (*(s->merge_in_progress)) {
+          if (s->value != nullptr) {
+            *(s->status) = MergeHelper::TimedFullMerge(
+                merge_operator, s->key->user_key(), nullptr,
+                merge_context->GetOperands(), s->value, s->logger,
+                s->statistics, s->env_, nullptr /* result_operand */, true);
+          }
+        } else {
+          *(s->status) = Status::NotFound();
+        }
+        *(s->found_final_value) = true;
+        return true;
+      }
+      case kTypeMerge: {
+        if (!merge_operator) {
+          *(s->status) = Status::InvalidArgument(
+              "merge_operator is not properly initialized.");
+          // Normally we continue the loop (return true) when we see a merge
+          // operand.  But in case of an error, we should stop the loop
+          // immediately and pretend we have found the value to stop further
+          // seek.  Otherwise, the later call will override this error status.
+          *(s->found_final_value) = true;
+          return true;
+        }
+        Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
+        *(s->merge_in_progress) = true;
+        merge_context->PushOperand(
+            v, s->inplace_update_support == false /* operand_pinned */);
+        if (merge_operator->ShouldMerge(merge_context->GetOperandsDirectionBackward())) {
+          *(s->status) = MergeHelper::TimedFullMerge(
+              merge_operator, s->key->user_key(), nullptr,
+              merge_context->GetOperands(), s->value, s->logger, s->statistics,
+              s->env_, nullptr /* result_operand */, true);
+          *(s->found_final_value) = true;
+          return true;
+        }
+        return false;
+      }
+      default:
+        assert(false);
+        return true;
+    }
+  }
+
+  // stop keep iterating;
+  return true;
+}
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,
                    MergeContext* merge_context,
@@ -788,6 +933,86 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,
 
     *seq = saver.seq;
   }
+
+  // No change to value, since we have not yet found a Put/Delete
+  if (!found_final_value && merge_in_progress) {
+    *s = Status::MergeInProgress();
+  }
+  PERF_COUNTER_ADD(get_from_memtable_count, 1);
+  return found_final_value;
+}
+
+/*GPU Accelerator*/
+bool MemTable::GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *>& value, Status* s,
+                   MergeContext* merge_context,
+                   SequenceNumber* max_covering_tombstone_seq,
+                   SequenceNumber* seq, const ReadOptions& read_opts,
+                   ReadCallback* callback, bool* is_blob_index) {
+  // The sequence number is updated synchronously in version_set.h
+  if (IsEmpty()) {
+    // Avoiding recording stats for speed.
+    return false;
+  }
+  PERF_TIMER_GUARD(get_from_memtable_time);
+
+  std::unique_ptr<FragmentedRangeTombstoneIterator> range_del_iter(
+      NewRangeTombstoneIterator(read_opts,
+                                GetInternalKeySeqno(key.internal_key())));
+  if (range_del_iter != nullptr) {
+    *max_covering_tombstone_seq =
+        std::max(*max_covering_tombstone_seq,
+                 range_del_iter->MaxCoveringTombstoneSeqnum(key.user_key()));
+  }
+
+  Slice user_key = key.user_key();
+  std::vector<PinnableSlice*>::iterator iters;
+  for(iters=value.begin(); iters != value.end(); iters++) {
+	  PinnableSlice *slcs = (*iters);
+	  std::cout << slcs->ToString(1) << std::endl;
+  }
+  bool found_final_value = false;
+  bool merge_in_progress = s->IsMergeInProgress();
+  bool const may_contain =
+      nullptr == prefix_bloom_
+          ? false
+          : prefix_bloom_->MayContain(prefix_extractor_->Transform(user_key));
+  if (prefix_bloom_ && !may_contain) {
+    // iter is null if prefix bloom says the key does not exist
+    PERF_COUNTER_ADD(bloom_memtable_miss_count, 1);
+    *seq = kMaxSequenceNumber;
+  } else {
+    if (prefix_bloom_) {
+      PERF_COUNTER_ADD(bloom_memtable_hit_count, 1);
+    }
+    Saver saver;
+    saver.status = s;
+    saver.found_final_value = &found_final_value;
+    saver.merge_in_progress = &merge_in_progress;
+    saver.key = &key;
+    //saver.value = value;
+    saver.values = &value;
+    saver.seq = kMaxSequenceNumber;
+    saver.mem = this;
+    saver.merge_context = merge_context;
+    saver.max_covering_tombstone_seq = *max_covering_tombstone_seq;
+    saver.merge_operator = moptions_.merge_operator;
+    saver.logger = moptions_.info_log;
+    saver.inplace_update_support = moptions_.inplace_update_support;
+    saver.statistics = moptions_.statistics;
+    saver.env_ = env_;
+    saver.callback_ = callback;
+    saver.is_blob_index = is_blob_index;
+    table_->Get(key, &saver, SaveValueGPU);
+
+    *seq = saver.seq;
+  }
+//  printf("GetFromGPU in memory Called End\n");
+//  std::vector<PinnableSlice *>::iterator iter;
+//  for(iter=value.begin(); iter != value.end(); iter++) {
+//	  PinnableSlice * slc = *iter;
+//	  std::cout << "end " << slc->ToString(1) << std::endl;
+//  }
+
 
   // No change to value, since we have not yet found a Put/Delete
   if (!found_final_value && merge_in_progress) {

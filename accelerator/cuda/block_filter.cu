@@ -32,7 +32,7 @@ void rudaIntBlockFilterKernel(// Parameters (ReadOnly)
                               // Variables
                               unsigned long long int *results_idx,
                               // Results
-                              RudaKVPair *results);
+                              RudaKVIndexPair *results);
 __global__
 void rudaPopulateSlicesFromHeap(size_t kSize, RudaSlice *sources);
 
@@ -47,12 +47,12 @@ struct RudaBlockFilterContext {
 
   // Results - Device
   unsigned long long int *d_results_idx;   // Atomic incrementer index
-  RudaKVPair *d_results;    // Filtered KV pairs
+  RudaKVIndexPair *d_results;    // Filtered KV pairs
 
   // Results - Host
   // Total results count copied from 'd_results_idx' after kernel call.
   unsigned long long int h_results_count;
-  RudaKVPair *h_results;    // Filtered KV pairs
+  RudaKVIndexPair *h_results;    // Filtered KV pairs
 
   // Cuda Kernel Parameters
   const size_t kSize = 0;
@@ -116,7 +116,7 @@ struct RudaBlockFilterContext {
     cudaCheckError(cudaMalloc(
         (void **) &d_results_idx, sizeof(unsigned long long int)));
     cudaCheckError(cudaMalloc(
-        (void **) &d_results, sizeof(RudaKVPair) * kMaxResultsCount));
+        (void **) &d_results, sizeof(RudaKVIndexPair) * kMaxResultsCount));
 
     cudaCheckError(cudaMemcpy(
         d_datablocks, &datablocks[0], sizeof(char) * datablocks.size(),
@@ -141,25 +141,31 @@ struct RudaBlockFilterContext {
     cudaCheckError(cudaMemcpy(
         &h_results_count, d_results_idx, sizeof(unsigned long long int),
         cudaMemcpyDeviceToHost));
-    cudaMallocHost((void **) &h_results, sizeof(RudaKVPair) * h_results_count);
+    cudaCheckError(cudaMallocHost(
+        (void **) &h_results, sizeof(RudaKVIndexPair) * h_results_count));
     cudaCheckError(cudaMemcpy(
-        h_results, d_results, sizeof(RudaKVPair) * h_results_count,
+        h_results, d_results, sizeof(RudaKVIndexPair) * h_results_count,
         cudaMemcpyDeviceToHost));
   }
 
-  void copyToFinalResults(std::vector<rocksdb::Slice> &keys,
+  void copyToFinalResults(const std::vector<char> &datablocks,
+                          std::vector<rocksdb::Slice> &keys,
                           std::vector<rocksdb::Slice> &values) {
     // Copy to results
     for (size_t i = 0; i < h_results_count; ++i) {
-      size_t key_size = h_results[i].key()->size();
-      size_t value_size = h_results[i].value()->size();
+      RudaKVIndexPair &entry = h_results[i];
+      size_t key_size = entry.key_index_.end_ - entry.key_index_.start_;
+      size_t value_size = entry.value_index_.end_ - entry.value_index_.start_;
       char *key = new char[key_size];
       char *value = new char[value_size];
-      memcpy(key, h_results[i].key()->stackData(), sizeof(char) * key_size);
       memcpy(
-          value, h_results[i].value()->stackData(), sizeof(char) * value_size);
-      keys.emplace_back(rocksdb::Slice(key, key_size));
-      values.emplace_back(rocksdb::Slice(value, value_size));
+          key, &datablocks[0] + entry.key_index_.start_,
+          sizeof(char) * key_size);
+      memcpy(
+          value, &datablocks[0] + entry.value_index_.end_,
+          sizeof(char) * value_size);
+      keys.emplace_back(key, key_size);
+      values.emplace_back(value, value_size);
     }
   }
 
@@ -192,7 +198,7 @@ void kernel::rudaIntBlockFilterKernel(// Parameters (ReadOnly)
                                       // Variables
                                       unsigned long long int *results_idx,
                                       // Results
-                                      RudaKVPair *results) {
+                                      RudaKVIndexPair *results) {
   uint64_t i = blockDim.x * blockIdx.x + threadIdx.x;
 
   // Overflow kernel ptr case.
@@ -223,9 +229,9 @@ void kernel::rudaIntBlockFilterKernel(// Parameters (ReadOnly)
   __syncthreads();
 
   size_t size = end - start;
-  DecodeSubDataBlocks(
+  DecodeNFilterSubDataBlocks(
       // Parameters
-      cached_data, size, start, end, ctx,
+      cached_data, size, block_seek_start_index, start, end, ctx,
       // Results
       results_idx, results);
 }
@@ -283,7 +289,7 @@ int sstIntBlockFilter(const std::vector<char> &datablocks,
       block_context.d_results);
 
   block_context.populateResultsFromCuda();
-  block_context.copyToFinalResults(keys, values);
+  block_context.copyToFinalResults(datablocks, keys, values);
 
   std::cout << "Total Results Count: " << block_context.h_results_count
       << std::endl;

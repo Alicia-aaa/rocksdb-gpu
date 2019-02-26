@@ -18,11 +18,13 @@ const int kMaxRudaSliceDataSize = 64;
 
 namespace ruda {
 
+// TODO(totoro): Not used... need to remove this class...
 enum class RudaSliceMode {
   HEAP, STACK
 };
 
 // Note(totoro): This class is copied from "rocksdb/Slice.h".
+// TODO(totoro): Not used... need to remove this class...
 class RudaSlice {
  public:
   // Create an empty slice.
@@ -107,6 +109,7 @@ class RudaSlice {
   // Change this slice to refer to an empty array
   __host__ __device__
   void clear() {
+    mode_ = RudaSliceMode::STACK;
     heap_data_ = nullptr;
     data_ = nullptr;
     memset(stack_data_, 0, sizeof(char) * kMaxRudaSliceDataSize);
@@ -124,10 +127,17 @@ class RudaSlice {
   // Intentionally copyable
 };
 
+// TODO(totoro): Not used... need to remove this class...
 class RudaKVPair {
  public:
   __host__ __device__
   RudaKVPair() : key_(RudaSlice()), value_(RudaSlice()) {}
+
+  __host__ __device__
+  void clear() {
+    key_.clear();
+    value_.clear();
+  }
 
   __host__ __device__
   RudaSlice* key() { return &key_; }
@@ -140,14 +150,47 @@ class RudaKVPair {
   RudaSlice value_; /* 128 byte */
 };
 
+class RudaIndexEntry {
+ public:
+  __host__ __device__
+  RudaIndexEntry() : start_(0), end_(0) {}
+
+  __host__ __device__
+  RudaIndexEntry(size_t start, size_t end) : start_(start), end_(end) {}
+
+  size_t start_;
+  size_t end_;
+};
+
+class RudaKVIndexPair {
+ public:
+  __host__ __device__
+  RudaKVIndexPair()
+      : key_index_(RudaIndexEntry()), value_index_(RudaIndexEntry()) {}
+
+  __host__ __device__
+  RudaKVIndexPair(size_t key_start, size_t key_end, size_t value_start,
+                  size_t value_end)
+      : key_index_(RudaIndexEntry(key_start, key_end)),
+        value_index_(RudaIndexEntry(value_start, value_end)) {}
+
+  RudaIndexEntry key_index_;
+  RudaIndexEntry value_index_;
+};
+
+__host__ __device__
+uint64_t DecodeFixed64(const char* ptr);
+
 __device__
-void DecodeSubDataBlocks(// Parameters
-                         const char *cached_data,
-                         const uint64_t cached_data_size,
-                         const uint64_t start_idx, const uint64_t end_idx,
-                         accelerator::FilterContext *ctx,
-                         // Results
-                         unsigned long long int *results_idx,
-                         RudaKVPair *results);
+void DecodeNFilterSubDataBlocks(// Parameters
+                                const char *cached_data,
+                                const uint64_t cached_data_size,
+                                const uint64_t block_offset,
+                                const uint64_t start_idx,
+                                const uint64_t end_idx,
+                                accelerator::FilterContext *ctx,
+                                // Results
+                                unsigned long long int *results_idx,
+                                RudaKVIndexPair *results);
 
 }  // namespace ruda

@@ -77,7 +77,7 @@ struct DecodeEntry {
   }
 };
 
-__device__
+__host__ __device__
 uint32_t DecodeFixed32(const char* ptr) {
   // if (port::kLittleEndian) {
   //   // Load the raw bytes
@@ -91,7 +91,7 @@ uint32_t DecodeFixed32(const char* ptr) {
       | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
 }
 
-__device__
+__host__ __device__
 uint64_t DecodeFixed64(const char* ptr) {
   // if (port::kLittleEndian) {
   //   // Load the raw bytes
@@ -115,14 +115,16 @@ unsigned long long int atomicAggInc(unsigned long long int *counter) {
 }
 
 __device__
-void DecodeSubDataBlocks(// Parameters
-                         const char *cached_data,
-                         const uint64_t cached_data_size,
-                         const uint64_t start_idx, const uint64_t end_idx,
-                         accelerator::FilterContext *ctx,
-                         // Results
-                         unsigned long long int *results_idx,
-                         ruda::RudaKVPair *results) {
+void DecodeNFilterSubDataBlocks(// Parameters
+                                const char *cached_data,
+                                const uint64_t cached_data_size,
+                                const uint64_t block_offset,
+                                const uint64_t start_idx,
+                                const uint64_t end_idx,
+                                accelerator::FilterContext *ctx,
+                                // Results
+                                unsigned long long int *results_idx,
+                                ruda::RudaKVIndexPair *results) {
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
   while (subblock < limit) {
@@ -164,8 +166,13 @@ void DecodeSubDataBlocks(// Parameters
     }
     if (filter_result) {
       unsigned long long int idx = atomicAdd(results_idx, 1);
-      results[idx].key()->copyToStack(key, key_size);
-      results[idx].value()->copyToStack(value, value_size);
+      size_t key_start = key - cached_data;
+      size_t value_start = value - cached_data;
+      results[idx] = RudaKVIndexPair(
+          block_offset + key_start,
+          block_offset + key_start + key_size,
+          block_offset + value_start,
+          block_offset + value_start + value_size);
     }
 
     // Heap Version

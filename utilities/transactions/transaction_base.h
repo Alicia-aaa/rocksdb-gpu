@@ -46,7 +46,7 @@ class TransactionBaseImpl : public Transaction {
   void SetSavePoint() override;
 
   Status RollbackToSavePoint() override;
-  
+
   Status PopSavePoint() override;
 
   using Transaction::Get;

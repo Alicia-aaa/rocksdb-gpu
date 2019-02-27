@@ -572,7 +572,7 @@ class Version {
            SequenceNumber* seq = nullptr, ReadCallback* callback = nullptr,
            bool* is_blob = nullptr);
 
-  void GetFromGPU(const ReadOptions&, const LookupKey& key, std::vector<PinnableSlice> &value,
+  void GetFromGPU(const ReadOptions&, const LookupKey& key, std::vector<PinnableSlice *> &value,
            Status* status, MergeContext* merge_context,
            SequenceNumber* max_covering_tombstone_seq,
            bool* value_found = nullptr, bool* key_exists = nullptr,

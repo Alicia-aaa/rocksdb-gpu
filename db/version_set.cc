@@ -1308,11 +1308,11 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 }
 
 void Version::GetFromGPU(const ReadOptions& /*read_options*/, const LookupKey& k,
-                  std::vector<PinnableSlice> &/*value*/, Status* status,
-                  MergeContext* /*merge_context*/,
-                  SequenceNumber* max_covering_tombstone_seq, bool* /*value_found*/,
-                  bool* key_exists, SequenceNumber* /*seq*/, ReadCallback* /*callback*/,
-                  bool* /*is_blob*/) {
+                  std::vector<PinnableSlice *> &value, Status* status,
+                  MergeContext* merge_context,
+                  SequenceNumber* max_covering_tombstone_seq, bool* value_found,
+                  bool* key_exists, SequenceNumber* seq, ReadCallback* callback,
+                  bool* is_blob) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
 
@@ -1321,6 +1321,18 @@ void Version::GetFromGPU(const ReadOptions& /*read_options*/, const LookupKey& k
   if (key_exists != nullptr) {
     // will falsify below if not found
     *key_exists = true;
+  }
+
+  PinnedIteratorsManager pinned_iters_mgr;
+  GetContext get_context(
+      user_comparator(), merge_operator_, info_log_, db_statistics_,
+      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
+      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
+      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
+
+  // Pin blocks that we read to hold merge operands
+  if (merge_operator_) {
+    pinned_iters_mgr.StartPinning();
   }
 
   FilePicker fp(

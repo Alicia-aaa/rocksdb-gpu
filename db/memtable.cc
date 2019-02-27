@@ -873,7 +873,7 @@ static bool SaveValueGPU(void* arg, const char* entry) {
   }
 
   // stop keep iterating;
-  return true;
+  return false;
 }
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,

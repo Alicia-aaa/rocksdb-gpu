@@ -1335,7 +1335,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 
 Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
                        ColumnFamilyHandle* column_family, const Slice& key,
-                       std::vector<PinnableSlice *> &pinnable_val, bool* /*value_found*/,
+                       std::vector<PinnableSlice *> &pinnable_val, bool* value_found,
                        ReadCallback* callback, bool* is_blob_index) {
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
@@ -1425,13 +1425,14 @@ Status DBImpl::GetImpl_GPU(const ReadOptions& read_options,
       return s;
     }
   }
-//  if (!done) {
-//    PERF_TIMER_GUARD(get_from_output_files_time);
-//    sv->current->GetFromGPU(read_options, lkey, pinnable_val, &s, &merge_context,
-//                     &max_covering_tombstone_seq, value_found, nullptr, nullptr,
-//                     callback, is_blob_index);
-//    RecordTick(stats_, MEMTABLE_MISS);
-//  }
+
+  if (!done) {
+    PERF_TIMER_GUARD(get_from_output_files_time);
+    sv->current->GetFromGPU(read_options, lkey, pinnable_val, &s, &merge_context,
+                     &max_covering_tombstone_seq, value_found, nullptr, nullptr,
+                     callback, is_blob_index);
+    RecordTick(stats_, MEMTABLE_MISS);
+  }
 
   {
     PERF_TIMER_GUARD(get_post_process_time);

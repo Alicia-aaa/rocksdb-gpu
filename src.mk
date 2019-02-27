@@ -488,7 +488,8 @@ CUDA_SOURCES =          \
   accelerator/cuda/block_decoder.cu \
   accelerator/cuda/simple_filter.cu \
   accelerator/cuda/block_filter.cu \
-  accelerator/cuda/block_stream_filter.cu
+  accelerator/cuda/block_stream_filter.cu \
+  accelerator/cuda/block_stream_filter_v2.cu
 
 AVX_SOURCES =           \
   accelerator/avx/filter.cc

@@ -16,6 +16,8 @@
 #define MB 1024 * KB
 #define GB 1024 * MB
 
+#define NUM_CUDA_STREAM 4
+
 #define cudaCheckError(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
                       bool abort=true) {
@@ -29,16 +31,16 @@ namespace ruda {
 namespace kernel {
 // Kernels
 __global__
-void rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
-                                    size_t offset, size_t kSize,
-                                    size_t dataSize, size_t maxCacheSize,
-                                    char *data, uint64_t *seek_indices,
-                                    accelerator::FilterContext *ctx,
-                                    uint64_t *block_seek_start_indices,
-                                    // Variables
-                                    unsigned long long int *results_idx,
-                                    // Results
-                                    RudaKVIndexPair *results);
+void rudaStreamIntBlockFilterKernelV2(// Parameters (ReadOnly)
+                                      size_t offset, size_t kSize,
+                                      size_t dataSize, size_t maxCacheSize,
+                                      char *data, uint64_t *seek_indices,
+                                      accelerator::FilterContext *ctx,
+                                      uint64_t *block_seek_start_indices,
+                                      // Variables
+                                      unsigned long long int *results_idx,
+                                      // Results
+                                      RudaKVIndexPair *results);
 }  // namespace kernel
 
 struct RudaBlockStreamContext {
@@ -167,22 +169,22 @@ struct RudaBlockStreamContext {
         datablocks, seek_indices, start, size);
   }
 
-  void populateToCuda(const std::vector<char> &datablocks,
-                      const std::vector<uint64_t> &seek_indices,
-                      char *d_datablocks, uint64_t *d_seek_indices) {
-    populateToCuda_d_results_idx();
-    populateToCuda_d_datablocks(datablocks, d_datablocks);
-    populateToCuda_d_seek_indices(seek_indices, d_seek_indices);
-    populateToCuda_d_gpu_block_seek_starts();
+  void copyToCuda(const std::vector<char> &datablocks,
+                  const std::vector<uint64_t> &seek_indices,
+                  char *d_datablocks, uint64_t *d_seek_indices) {
+    copyToCuda_d_results_idx();
+    copyToCuda_d_datablocks(datablocks, d_datablocks);
+    copyToCuda_d_seek_indices(seek_indices, d_seek_indices);
+    copyToCuda_d_gpu_block_seek_starts();
   }
 
-  void populateToCuda_d_results_idx() {
+  void copyToCuda_d_results_idx() {
     cudaCheckError(cudaMemsetAsync(
         d_results_idx, 0, sizeof(unsigned long long int), stream));
   }
 
-  void populateToCuda_d_datablocks(const std::vector<char> &datablocks,
-                                   char *d_datablocks) {
+  void copyToCuda_d_datablocks(const std::vector<char> &datablocks,
+                               char *d_datablocks) {
     cudaCheckError(cudaMemcpyAsync(
         &d_datablocks[datablocks_start_offset],
         &datablocks[datablocks_start_offset],
@@ -190,15 +192,15 @@ struct RudaBlockStreamContext {
         stream));
   }
 
-  void populateToCuda_d_seek_indices(const std::vector<uint64_t> &seek_indices,
-                                     uint64_t *d_seek_indices) {
+  void copyToCuda_d_seek_indices(const std::vector<uint64_t> &seek_indices,
+                                 uint64_t *d_seek_indices) {
     cudaCheckError(cudaMemcpyAsync(
         &d_seek_indices[seek_start_offset], &seek_indices[seek_start_offset],
         sizeof(uint64_t) * seek_size, cudaMemcpyHostToDevice,
         stream));
   }
 
-  void populateToCuda_d_gpu_block_seek_starts() {
+  void copyToCuda_d_gpu_block_seek_starts() {
     cudaCheckError(cudaMemcpyAsync(
         d_gpu_block_seek_starts, gpu_block_seek_starts,
         sizeof(uint64_t) * kGridSizePerStream, cudaMemcpyHostToDevice,
@@ -210,10 +212,10 @@ struct RudaBlockStreamContext {
                      // Sources
                      char *d_datablocks, uint64_t *d_seek_indices,
                      accelerator::FilterContext *d_cond_ctx) {
-    kernel::rudaStreamIntBlockFilterKernel<<<kGridSizePerStream,
-                                             kBlockSize,
-                                             kMaxCacheSize,
-                                             stream>>>(
+    kernel::rudaStreamIntBlockFilterKernelV2<<<kGridSizePerStream,
+                                               kBlockSize,
+                                               kMaxCacheSize,
+                                               stream>>>(
       seek_start_offset, kSize, kTotalDataSize, kMaxCacheSize,
       d_datablocks, d_seek_indices, d_cond_ctx, d_gpu_block_seek_starts,
       d_results_idx, d_results
@@ -236,17 +238,12 @@ struct RudaBlockStreamContext {
     cudaCheckError( cudaFree(d_results) );
   }
 
-  void initializeStream() {
-    cudaCheckError( cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) );
-  }
-
-  void destroyStream() {
-    cudaCheckError( cudaStreamDestroy(stream) );
+  void setStream(cudaStream_t new_stream) {
+    stream = new_stream;
   }
 
   void clear() {
     freeCudaObjects();
-    destroyStream();
     cudaCheckError( cudaEventDestroy(kernel_finish_event) );
     cudaCheckError( cudaFreeHost(gpu_block_seek_starts) );
     cudaCheckError( cudaFreeHost(h_results) );
@@ -269,6 +266,7 @@ struct RudaBlockStreamManager {
 
   // Streams
   std::vector<RudaBlockStreamContext> stream_ctxs;
+  cudaStream_t streams[NUM_CUDA_STREAM];
 
   // Parameters
   char *d_datablocks;
@@ -392,16 +390,26 @@ struct RudaBlockStreamManager {
         d_cond_ctx, &cond_ctx, sizeof(accelerator::FilterContext),
         cudaMemcpyHostToDevice));
 
-    // Asynchronous memory copying
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
-      ctx.initializeStream();
+    // Initialize streams
+    for (size_t i = 0; i < NUM_CUDA_STREAM; ++i) {
+      cudaCheckError(cudaStreamCreateWithFlags(
+          &streams[i], cudaStreamNonBlocking));
     }
 
-    // Copies sources to GPU (datablocks, seek_indices)
-    // Accelerated by stream-pipelining...
+    for (size_t i = 0; i < kStreamCount; ++i) {
+      auto &ctx = stream_ctxs[i];
+      size_t cuda_stream_idx = i % NUM_CUDA_STREAM;
+      ctx.setStream(streams[cuda_stream_idx]);
+    }
+  }
+
+  void executeStreams(const std::vector<char> &datablocks,
+                      const std::vector<uint64_t> &seek_indices) {
     for (auto &ctx : stream_ctxs) {
-      ctx.populateToCuda(
-          datablocks, seek_indices, d_datablocks, d_seek_indices);
+      ctx.copyToCuda(datablocks, seek_indices, d_datablocks, d_seek_indices);
+      ctx.executeKernel(
+          datablocks.size(), d_datablocks, d_seek_indices, d_cond_ctx);
+      ctx.copyFromCuda();
     }
   }
 
@@ -416,7 +424,7 @@ struct RudaBlockStreamManager {
   }
 
   void copyFromCuda() {
-    for (RudaBlockStreamContext &ctx : stream_ctxs) {
+    for (auto &ctx : stream_ctxs) {
       ctx.copyFromCuda();
     }
   }
@@ -492,6 +500,37 @@ struct RudaBlockStreamManager {
     std::chrono::duration<float, std::milli> elapsed = end - begin;
     std::cout << "[GPU][translatePairsToSlices] Execution Time: "
         << elapsed.count() << std::endl;
+
+    // Note(totoro): Non-thread version...
+    // begin = std::chrono::high_resolution_clock::now();
+    // bool *finished = new bool[kStreamCount];
+    // for (size_t i = 0; i < kStreamCount; ++i) {
+    //   finished[i] = false;
+    // }
+    // while (true) {
+    //   bool total_finished = true;
+    //   for (size_t i = 0; i < kStreamCount; ++i) {
+    //     if (!finished[i]) {
+    //       total_finished = false;
+    //     }
+    //   }
+    //   if (total_finished) {
+    //     break;
+    //   }
+    //   for (size_t i = 0; i < kStreamCount; ++i) {
+    //     if (finished[i]) continue;
+    //     finished[i] =
+    //         cudaEventQuery(stream_ctxs[i].kernel_finish_event) == cudaSuccess;
+    //     if (!finished[i]) continue;
+    //     std::cout << "CTX TRANSLATE: " << i << std::endl;
+    //     _translatePairsToSlices(stream_ctxs[i], datablocks, keys, values);
+    //   }
+    // }
+    // delete[] finished;
+    // end = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<float, std::milli> elapsed = end - begin;
+    // std::cout << "[GPU][translatePairsToSlices] Execution Time: "
+    //     << elapsed.count() << std::endl;
   }
 
   void log() {
@@ -531,6 +570,9 @@ struct RudaBlockStreamManager {
     cudaCheckError( cudaFree(d_datablocks) );
     cudaCheckError( cudaFree(d_seek_indices) );
     cudaCheckError( cudaFree(d_cond_ctx) );
+    for (size_t i = 0; i < NUM_CUDA_STREAM; ++i) {
+      cudaCheckError( cudaStreamDestroy(streams[i]) );
+    }
   }
 
   void clear() {
@@ -543,17 +585,17 @@ struct RudaBlockStreamManager {
 };
 
 __global__
-void kernel::rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
-                                            size_t offset, size_t kSize,
-                                            size_t dataSize,
-                                            size_t maxCacheSize,
-                                            char *data, uint64_t *seek_indices,
-                                            accelerator::FilterContext *ctx,
-                                            uint64_t *block_seek_start_indices,
-                                            // Variables
-                                            unsigned long long int *results_idx,
-                                            // Results
-                                            RudaKVIndexPair *results) {
+void kernel::rudaStreamIntBlockFilterKernelV2(// Parameters (ReadOnly)
+                                              size_t offset, size_t kSize,
+                                              size_t dataSize,
+                                              size_t maxCacheSize,
+                                              char *data, uint64_t *seek_indices,
+                                              accelerator::FilterContext *ctx,
+                                              uint64_t *block_seek_start_indices,
+                                              // Variables
+                                              unsigned long long int *results_idx,
+                                              // Results
+                                              RudaKVIndexPair *results) {
   uint64_t i = offset + blockDim.x * blockIdx.x + threadIdx.x;
 
   // Overflow kernel ptr case.
@@ -594,24 +636,23 @@ void kernel::rudaStreamIntBlockFilterKernel(// Parameters (ReadOnly)
       results_idx, results);
 }
 
-int sstStreamIntBlockFilter(std::vector<char> &datablocks,
-                            std::vector<uint64_t> &seek_indices,
-                            accelerator::FilterContext context,
-                            const size_t max_results_count,
-                            std::vector<rocksdb::Slice> &keys,
-                            std::vector<rocksdb::Slice> &values) {
+int sstStreamIntBlockFilterV2(std::vector<char> &datablocks,
+                              std::vector<uint64_t> &seek_indices,
+                              accelerator::FilterContext context,
+                              const size_t max_results_count,
+                              std::vector<rocksdb::Slice> &keys,
+                              std::vector<rocksdb::Slice> &values) {
   // Warming up
   // Note(totoro): Because, there is a warming up latency on gpu when
   // gpu-related function called(ex. set up gpu driver). So, we ignore this
   // latency by just firing meaningless malloc function.
   void *warming_up;
   cudaCheckError(cudaMalloc(&warming_up, 0));
-  cudaCheckError(cudaFree(warming_up));
 
   RudaBlockStreamManager block_stream_mgr(
       seek_indices.size() /* kSize */,
       64 /* kBlockSize */,
-      4 /* kStreamCount */,
+      16 /* kStreamCount */,
       max_results_count);
 
   // Copy & Initializes variables from host to device.
@@ -619,15 +660,14 @@ int sstStreamIntBlockFilter(std::vector<char> &datablocks,
   // block_stream_mgr.log();
 
   block_stream_mgr.registerPinnedMemory(datablocks, seek_indices, context);
+  block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
   // ----------------------------------------------
   // Cuda Stream Pipelined (Accelerate)
-  block_stream_mgr.populateToCuda(datablocks, seek_indices, context);
-  std::cout << "Total GPU used memory: "
-      << (block_stream_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
-  block_stream_mgr.executeKernels(datablocks.size());
-  block_stream_mgr.copyFromCuda();
+  block_stream_mgr.executeStreams(datablocks, seek_indices);
   // ----------------------------------------------
   block_stream_mgr.translatePairsToSlices(datablocks, keys, values);
+  std::cout << "Total GPU used memory: "
+      << (block_stream_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
   block_stream_mgr.unregisterPinnedMemory(datablocks, seek_indices, context);
   block_stream_mgr.clear();
 

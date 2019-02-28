@@ -17,7 +17,7 @@ const int ACC_ERR = 1;
 const int ACC_OK = 0;
 
 enum Operator {
-  EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ,
+  EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ, INVALID
 };
 
 inline std::string toStringOperator(Operator op) {
@@ -33,7 +33,7 @@ inline std::string toStringOperator(Operator op) {
 
 struct FilterContext {
   Operator _op;
-  int _pivot;
+  long _pivot;
 
   std::string toString() const {
     std::stringstream ss;
@@ -42,7 +42,7 @@ struct FilterContext {
     return ss.str();
   }
 
-  int operator()(const int target) const {
+  int operator()(const long target) const {
     switch (_op) {
       case EQ:
         return target == _pivot ? 1 : 0;

@@ -24,11 +24,13 @@
 #include <string.h>
 #include <string>
 
+
 #ifdef __cpp_lib_string_view
 #include <string_view>
 #endif
 
 #include "rocksdb/cleanable.h"
+#include "accelerator/common.h"
 
 namespace rocksdb {
 
@@ -244,9 +246,11 @@ class PinnableSlice : public Slice, public Cleanable {
 /* GPU Accelerator */
 class SlicewithSchema : public Slice, public Cleanable {
  public:
-  SlicewithSchema(const char* d, size_t n, std::string filter, uint * type, uint * length)
+  SlicewithSchema(const char* d, size_t n, accelerator::FilterContext ctx,
+		  int idx, uint * type, uint * length)
  : Slice(d, n) {
-	  filter_cond = filter;
+	  context = ctx;
+	  target_idx = idx;
 	  field_type = type;
 	  field_length = length;
   }
@@ -254,15 +258,30 @@ class SlicewithSchema : public Slice, public Cleanable {
   // No copy constructor and copy assignment allowed.
   SlicewithSchema(SlicewithSchema&) = delete;
   SlicewithSchema& operator=(SlicewithSchema&) = delete;
+
   uint getType(uint index) {
 	  return field_type[index - 1];
   }
+
   uint getLength(uint index) {
 	  return field_type[index - 1];
   }
 
+  int getTarget() {
+	  return target_idx;
+  }
+
+  accelerator::Operator getOp() {
+	  return context._op;
+  }
+
+  long getPivot() {
+	  return context._pivot;
+  }
+
  private:
-  std::string filter_cond;
+  accelerator::FilterContext context;
+  int target_idx;
   uint * field_type;
   uint * field_length;
 };

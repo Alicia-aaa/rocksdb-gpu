@@ -1309,7 +1309,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 
 void Version::ValueFilter(const ReadOptions& /*read_options*/,
                           const LookupKey& k,
-                          std::vector<PinnableSlice *> &value, Status* status,
+                          std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
                           bool* value_found, bool* key_exists,

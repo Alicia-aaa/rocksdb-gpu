@@ -1213,7 +1213,7 @@ Status DBImpl::Get(const ReadOptions& read_options,
 Status DBImpl::ValueFilter(const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family,
                            const SlicewithSchema& key,
-                           std::vector<PinnableSlice *> &value) {
+                           std::vector<PinnableSlice> &value) {
   return ValueFilterImpl(read_options, column_family, key, value);
 }
 
@@ -1337,7 +1337,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                ColumnFamilyHandle* column_family,
                                const SlicewithSchema& key,
-                               std::vector<PinnableSlice *> &pinnable_val,
+                               std::vector<PinnableSlice> &pinnable_val,
                                bool* value_found,
                                ReadCallback* callback, bool* is_blob_index) {
   StopWatch sw(env_, stats_, DB_GET);

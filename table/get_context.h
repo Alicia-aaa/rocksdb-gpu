@@ -60,7 +60,7 @@ class GetContext {
   /*GPU Accelerator*/
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
-             const Slice& user_key, std::vector<PinnableSlice*> &value, bool* value_found,
+             const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
              MergeContext* merge_context,
              SequenceNumber* max_covering_tombstone_seq, Env* env,
              SequenceNumber* seq = nullptr,
@@ -121,7 +121,7 @@ class GetContext {
   GetState state_;
   Slice user_key_;
   PinnableSlice* pinnable_val_;
-  std::vector<PinnableSlice *> *values;
+  std::vector<PinnableSlice> *values;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
   MergeContext* merge_context_;
   SequenceNumber* max_covering_tombstone_seq_;

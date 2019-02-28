@@ -66,7 +66,7 @@ class TransactionBaseImpl : public Transaction {
   Status ValueFilter(const ReadOptions& options,
                      ColumnFamilyHandle* column_family,
                      const SlicewithSchema& key,
-                     std::vector<PinnableSlice *> &values) override;
+                     std::vector<PinnableSlice> &values) override;
 
 
   using Transaction::GetForUpdate;

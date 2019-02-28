@@ -71,14 +71,14 @@ class MemTableListVersion {
   }
 
   /*GPU Accelerator*/
-  bool ValueFilter(const LookupKey& key, std::vector<PinnableSlice *> &value,
+  bool ValueFilter(const LookupKey& key, std::vector<PinnableSlice> &value,
                    Status* s, MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
                    SequenceNumber* seq, const ReadOptions& read_opts,
                    ReadCallback* callback = nullptr,
                    bool* is_blob_index = nullptr);
 
-  bool ValueFilter(const LookupKey& key, std::vector<PinnableSlice *> &value,
+  bool ValueFilter(const LookupKey& key, std::vector<PinnableSlice> &value,
                    Status* s, MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
                    const ReadOptions& read_opts,
@@ -151,7 +151,7 @@ class MemTableListVersion {
   /*GPU Accelerator*/
 
   bool ValueFilterFromList(std::list<MemTable*>* list, const LookupKey& key,
-                           std::vector<PinnableSlice *> &value, Status* s,
+                           std::vector<PinnableSlice> &value, Status* s,
                            MergeContext* merge_context,
                            SequenceNumber* max_covering_tombstone_seq,
                            SequenceNumber* seq, const ReadOptions& read_opts,

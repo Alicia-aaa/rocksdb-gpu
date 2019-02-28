@@ -211,7 +211,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
                                    const SlicewithSchema& key,
-                                   std::vector<PinnableSlice *>& values);
+                                   std::vector<PinnableSlice>& values);
 
 
   // Records the state of the batch for future calls to RollbackToSavePoint().
@@ -257,7 +257,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
                                    const SlicewithSchema& key,
-                                   std::vector<PinnableSlice *>& values,
+                                   std::vector<PinnableSlice> & values,
                                    ReadCallback* callback);
   struct Rep;
   std::unique_ptr<Rep> rep;

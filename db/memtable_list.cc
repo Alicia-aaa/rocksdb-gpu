@@ -114,7 +114,7 @@ bool MemTableListVersion::Get(const LookupKey& key, std::string* value,
 }
 
 bool MemTableListVersion::ValueFilter(const LookupKey& key,
-                                      std::vector<PinnableSlice *> &value,
+                                      std::vector<PinnableSlice> &value,
                                       Status* s, MergeContext* merge_context,
                                       SequenceNumber* max_covering_tombstone_seq,
                                       SequenceNumber* seq,
@@ -171,7 +171,7 @@ bool MemTableListVersion::GetFromList(
 }
 
 bool MemTableListVersion::ValueFilterFromList(
-    std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice *> &value,
+    std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice> &value,
     Status* s, MergeContext* merge_context,
     SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
     const ReadOptions& read_opts, ReadCallback* callback, bool* is_blob_index) {

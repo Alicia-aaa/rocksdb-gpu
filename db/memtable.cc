@@ -581,7 +581,7 @@ struct Saver {
   bool* merge_in_progress;
   std::string* value;
   /*GPU accelerator*/
-  std::vector<PinnableSlice*> * values;
+  std::vector<PinnableSlice> * values;
   SequenceNumber seq;
   const MergeOperator* merge_operator;
   // the merge operations encountered;
@@ -812,9 +812,7 @@ static bool SaveValueOnAccFilter(void* arg, const char* entry) {
           }
         } else if (s->value != nullptr) {
           s->value->assign(v.data(), v.size());
-          PinnableSlice* pinValue = new PinnableSlice(s->value);
-          pinValue->PinSelf();
-          s->values->push_back(pinValue);
+          s->values->emplace_back(std::move(PinnableSlice(s->value)));
         }
         if (s->inplace_update_support) {
           s->mem->GetLock(s->key->user_key())->ReadUnlock();
@@ -944,7 +942,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,
 
 /*GPU Accelerator*/
 bool MemTable::ValueFilter(const LookupKey& key,
-                           std::vector<PinnableSlice *>& value, Status* s,
+                           std::vector<PinnableSlice>& value, Status* s,
                            MergeContext* merge_context,
                            SequenceNumber* max_covering_tombstone_seq,
                            SequenceNumber* seq, const ReadOptions& read_opts,
@@ -966,11 +964,6 @@ bool MemTable::ValueFilter(const LookupKey& key,
   }
 
   Slice user_key = key.user_key();
-  std::vector<PinnableSlice*>::iterator iters;
-  for(iters=value.begin(); iters != value.end(); iters++) {
-	  PinnableSlice *slcs = (*iters);
-	  std::cout << slcs->ToString(1) << std::endl;
-  }
   bool found_final_value = false;
   bool merge_in_progress = s->IsMergeInProgress();
   bool const may_contain =
@@ -1007,12 +1000,12 @@ bool MemTable::ValueFilter(const LookupKey& key,
 
     *seq = saver.seq;
   }
-//  printf("ValueFilter in memory Called End\n");
-//  std::vector<PinnableSlice *>::iterator iter;
-//  for(iter=value.begin(); iter != value.end(); iter++) {
-//	  PinnableSlice * slc = *iter;
-//	  std::cout << "end " << slc->ToString(1) << std::endl;
-//  }
+  printf("ValueFilter in memory Called End\n");
+  std::vector<PinnableSlice>::iterator iter;
+  for(iter=value.begin(); iter != value.end(); iter++) {
+	  (*iter).PinSelf();
+	  std::cout << "end " << (*iter).ToString(1) << std::endl;
+  }
 
 
   // No change to value, since we have not yet found a Put/Delete

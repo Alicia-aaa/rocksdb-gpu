@@ -179,6 +179,21 @@ class PinnableSlice : public Slice, public Cleanable {
   PinnableSlice(PinnableSlice&) = delete;
   PinnableSlice& operator=(PinnableSlice&) = delete;
 
+  // Move constructor allowed.
+  PinnableSlice(PinnableSlice&& other) {
+    *this = std::move(other);
+  }
+  PinnableSlice & operator=(PinnableSlice&& other) {
+	  if(this != &other) {
+		  self_space_ = std::move(other.self_space_);
+		  buf_ = other.buf_;
+		  data_ = other.data_;
+		  size_ = other.size_;
+		  pinned_ = other.pinned_;
+	  }
+	  return *this;
+  }
+
   inline void PinSlice(const Slice& s, CleanupFunction f, void* arg1,
                        void* arg2) {
     assert(!pinned_);

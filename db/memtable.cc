@@ -733,9 +733,9 @@ static bool SaveValue(void* arg, const char* entry) {
   // s->state could be Corrupt, merge or notfound
   return false;
 }
-/*GPU Accelerator*/
 
-static bool SaveValueGPU(void* arg, const char* entry) {
+/*GPU Accelerator*/
+static bool SaveValueOnAccFilter(void* arg, const char* entry) {
   Saver* s = reinterpret_cast<Saver*>(arg);
   assert(s != nullptr);
   MergeContext* merge_context = s->merge_context;
@@ -757,8 +757,8 @@ static bool SaveValueGPU(void* arg, const char* entry) {
   const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
 //  std::string temp;
 //  temp.assign(key_ptr, 4);
-//  std::cout<<"SaveValueGPU key_ptr4" << temp << std::endl;
-//  std::cout<<"SaveValueGPU is same?" << s->mem->GetInternalKeyComparator().user_comparator()->Equal(
+//  std::cout<<"SaveValueOnAccFilter key_ptr4" << temp << std::endl;
+//  std::cout<<"SaveValueOnAccFilter is same?" << s->mem->GetInternalKeyComparator().user_comparator()->Equal(
 //          Slice(key_ptr, 4 ), s->key->user_key()) << std::endl;
 
   if (s->mem->GetInternalKeyComparator().user_comparator()->Equal(
@@ -943,11 +943,12 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,
 }
 
 /*GPU Accelerator*/
-bool MemTable::GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *>& value, Status* s,
-                   MergeContext* merge_context,
-                   SequenceNumber* max_covering_tombstone_seq,
-                   SequenceNumber* seq, const ReadOptions& read_opts,
-                   ReadCallback* callback, bool* is_blob_index) {
+bool MemTable::ValueFilter(const LookupKey& key,
+                           std::vector<PinnableSlice *>& value, Status* s,
+                           MergeContext* merge_context,
+                           SequenceNumber* max_covering_tombstone_seq,
+                           SequenceNumber* seq, const ReadOptions& read_opts,
+                           ReadCallback* callback, bool* is_blob_index) {
   // The sequence number is updated synchronously in version_set.h
   if (IsEmpty()) {
     // Avoiding recording stats for speed.
@@ -1002,11 +1003,11 @@ bool MemTable::GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *>& va
     saver.env_ = env_;
     saver.callback_ = callback;
     saver.is_blob_index = is_blob_index;
-    table_->Get(key, &saver, SaveValueGPU);
+    table_->Get(key, &saver, SaveValueOnAccFilter);
 
     *seq = saver.seq;
   }
-//  printf("GetFromGPU in memory Called End\n");
+//  printf("ValueFilter in memory Called End\n");
 //  std::vector<PinnableSlice *>::iterator iter;
 //  for(iter=value.begin(); iter != value.end(); iter++) {
 //	  PinnableSlice * slc = *iter;

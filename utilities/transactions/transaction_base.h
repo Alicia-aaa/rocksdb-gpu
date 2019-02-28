@@ -62,9 +62,11 @@ class TransactionBaseImpl : public Transaction {
   }
 
   /* GPU Accelerator */
-  using Transaction::Get_with_GPU;
-  Status Get_with_GPU(const ReadOptions& options, ColumnFamilyHandle* column_family,
-             const Slice& key, std::vector<PinnableSlice *> &values) override;
+  using Transaction::ValueFilter;
+  Status ValueFilter(const ReadOptions& options,
+                     ColumnFamilyHandle* column_family,
+                     const SlicewithSchema& key,
+                     std::vector<PinnableSlice *> &values) override;
 
 
   using Transaction::GetForUpdate;

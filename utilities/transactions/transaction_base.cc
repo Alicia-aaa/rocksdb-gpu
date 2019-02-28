@@ -214,11 +214,13 @@ Status TransactionBaseImpl::Get(const ReadOptions& read_options,
                                         pinnable_val);
 }
 
-Status TransactionBaseImpl::Get_with_GPU(const ReadOptions& read_options,
-                                ColumnFamilyHandle* column_family,
-                                const Slice& key, std::vector<PinnableSlice *> &pinnable_values) {
-  return write_batch_.GetGPUFromBatchAndDB(db_, read_options, column_family, key,
-                                        pinnable_values);
+Status TransactionBaseImpl::ValueFilter(const ReadOptions& read_options,
+                                        ColumnFamilyHandle* column_family,
+                                        const SlicewithSchema& key,
+                                        std::vector<PinnableSlice *> &pinnable_values) {
+  return write_batch_.ValueFilterFromBatchAndDB(db_, read_options,
+                                                column_family, key,
+                                                pinnable_values);
 }
 
 Status TransactionBaseImpl::GetForUpdate(const ReadOptions& read_options,

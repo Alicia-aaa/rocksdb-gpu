@@ -343,9 +343,12 @@ class DB {
   }
 
   /* GPU Accelerator */
-  virtual Status Get_with_GPU(const ReadOptions& /*options*/,
-                     ColumnFamilyHandle* /*column_family*/, const Slice& /*key*/,
-                     std::vector<PinnableSlice *>& /*value*/) {Status s; return s;};
+  virtual Status ValueFilter(const ReadOptions& /*options*/,
+                             ColumnFamilyHandle* /*column_family*/,
+                             const SlicewithSchema& /*key*/,
+                             std::vector<PinnableSlice *>& /*value*/) {
+    return Status();
+  };
 
   // If keys[i] does not exist in the database, then the i'th returned
   // status will be one for which Status::IsNotFound() is true, and

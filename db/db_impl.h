@@ -114,15 +114,19 @@ class DBImpl : public DB {
                  bool* value_found = nullptr, ReadCallback* callback = nullptr,
                  bool* is_blob_index = nullptr);
 
-  using DB::Get_with_GPU;
-  virtual Status Get_with_GPU(const ReadOptions& options,
-                     ColumnFamilyHandle* column_family, const Slice& key,
-                     std::vector<PinnableSlice *> &values) override;
+  using DB::ValueFilter;
+  virtual Status ValueFilter(const ReadOptions& options,
+                             ColumnFamilyHandle* column_family,
+                             const SlicewithSchema& key,
+                             std::vector<PinnableSlice *> &values) override;
 
-  Status GetImpl_GPU(const ReadOptions& options, ColumnFamilyHandle* column_family,
-                 const Slice& key, std::vector<PinnableSlice *> &values,
-                 bool* value_found = nullptr, ReadCallback* callback = nullptr,
-                 bool* is_blob_index = nullptr);
+  Status ValueFilterImpl(const ReadOptions& options,
+                         ColumnFamilyHandle* column_family,
+                         const SlicewithSchema& key,
+                         std::vector<PinnableSlice *> &values,
+                         bool* value_found = nullptr,
+                         ReadCallback* callback = nullptr,
+                         bool* is_blob_index = nullptr);
 
   using DB::MultiGet;
   virtual std::vector<Status> MultiGet(

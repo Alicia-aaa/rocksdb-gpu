@@ -113,14 +113,17 @@ bool MemTableListVersion::Get(const LookupKey& key, std::string* value,
                      is_blob_index);
 }
 
-bool MemTableListVersion::GetFromGPU(const LookupKey& key, std::vector<PinnableSlice *> &value,
-                              Status* s, MergeContext* merge_context,
-                              SequenceNumber* max_covering_tombstone_seq,
-                              SequenceNumber* seq, const ReadOptions& read_opts,
-                              ReadCallback* callback, bool* is_blob_index) {
-  return GetFromListGPU(&memlist_, key, value, s, merge_context,
-                     max_covering_tombstone_seq, seq, read_opts, callback,
-                     is_blob_index);
+bool MemTableListVersion::ValueFilter(const LookupKey& key,
+                                      std::vector<PinnableSlice *> &value,
+                                      Status* s, MergeContext* merge_context,
+                                      SequenceNumber* max_covering_tombstone_seq,
+                                      SequenceNumber* seq,
+                                      const ReadOptions& read_opts,
+                                      ReadCallback* callback,
+                                      bool* is_blob_index) {
+  return ValueFilterFromList(&memlist_, key, value, s, merge_context,
+                             max_covering_tombstone_seq, seq, read_opts,
+                             callback, is_blob_index);
 }
 
 bool MemTableListVersion::GetFromHistory(
@@ -167,7 +170,7 @@ bool MemTableListVersion::GetFromList(
   return false;
 }
 
-bool MemTableListVersion::GetFromListGPU(
+bool MemTableListVersion::ValueFilterFromList(
     std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice *> &value,
     Status* s, MergeContext* merge_context,
     SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
@@ -178,8 +181,9 @@ bool MemTableListVersion::GetFromListGPU(
     SequenceNumber current_seq = kMaxSequenceNumber;
 
     bool done =
-        memtable->GetFromGPU(key, value, s, merge_context, max_covering_tombstone_seq,
-                      &current_seq, read_opts, callback, is_blob_index);
+        memtable->ValueFilter(key, value, s, merge_context,
+                              max_covering_tombstone_seq, &current_seq,
+                              read_opts, callback, is_blob_index);
     if (*seq == kMaxSequenceNumber) {
       // Store the most recent sequence number of any operation on this key.
       // Since we only care about the most recent change, we only need to

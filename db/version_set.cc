@@ -1307,12 +1307,14 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
   }
 }
 
-void Version::GetFromGPU(const ReadOptions& /*read_options*/, const LookupKey& k,
-                  std::vector<PinnableSlice *> &value, Status* status,
-                  MergeContext* merge_context,
-                  SequenceNumber* max_covering_tombstone_seq, bool* value_found,
-                  bool* key_exists, SequenceNumber* seq, ReadCallback* callback,
-                  bool* is_blob) {
+void Version::ValueFilter(const ReadOptions& /*read_options*/,
+                          const LookupKey& k,
+                          std::vector<PinnableSlice *> &value, Status* status,
+                          MergeContext* merge_context,
+                          SequenceNumber* max_covering_tombstone_seq,
+                          bool* value_found, bool* key_exists,
+                          SequenceNumber* seq, ReadCallback* callback,
+                          bool* is_blob) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
 

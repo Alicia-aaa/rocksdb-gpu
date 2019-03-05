@@ -13,6 +13,7 @@
 #include "rocksdb/env.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/statistics.h"
+#include <iostream>
 
 namespace rocksdb {
 
@@ -319,6 +320,18 @@ bool GetContext::SaveValue(const ParsedInternalKey& parsed_key,
   }
 
   // state_ could be Corrupt, merge or notfound
+  return false;
+}
+
+/* GPU Accelerator */
+bool GetContext::checkTableRange(const ParsedInternalKey& parsed_key) {
+
+  std::cout << "parsed_key " << Slice(parsed_key.user_key.data_, 4).ToString(1)
+		  << " and user_key " << user_key_.ToString(1) << std::endl;
+  if (ucmp_->Equal(Slice(parsed_key.user_key.data_,4), user_key_)) {
+	  return true;
+  }
+
   return false;
 }
 

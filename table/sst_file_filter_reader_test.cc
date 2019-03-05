@@ -329,13 +329,13 @@ class SstFileFilterReaderTest : public testing::Test {
     std::cout << "[DecodeDataBlocksOnGpu] END" << std::endl;
   }
 
-  virtual void SetUp() {
-    options_.comparator = test::Uint64Comparator();
-    // uint64_t kNumKeys = 1000000000;
-    uint64_t kNumKeys = 100000000; // 25000000;
-    FileWrite(kNumKeys);
-    // FileWriteVector(kNumKeys);
-  }
+//  virtual void SetUp() {
+//    options_.comparator = test::Uint64Comparator();
+//    // uint64_t kNumKeys = 1000000000;
+//    uint64_t kNumKeys = 100000000; // 25000000;
+//    FileWrite(kNumKeys);
+//    // FileWriteVector(kNumKeys);
+//  }
 
  protected:
   Options options_;
@@ -362,12 +362,12 @@ TEST_F(SstFileFilterReaderTest, Uint64Comparator) {
   CreateFileAndCheck(keys);
 } */
 
-TEST_F(SstFileFilterReaderTest, FilterOnCPU) {
-  options_.comparator = test::Uint64Comparator();
-  accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
-  std::vector<int> results;
-  FilterWithCPU(ctx, results);
-}
+//TEST_F(SstFileFilterReaderTest, FilterOnCPU) {
+//  options_.comparator = test::Uint64Comparator();
+//  accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
+//  std::vector<int> results;
+//  FilterWithCPU(ctx, results);
+//}
 
 // TEST_F(SstFileFilterReaderTest, FilterTestWithCPUVector) {
 //   options_.comparator = test::Uint64Comparator();
@@ -443,39 +443,39 @@ TEST_F(SstFileFilterReaderTest, FilterOnCPU) {
 //       << elapsed.count() << std::endl;
 // }
 
-TEST_F(SstFileFilterReaderTest, FilterOnGpu) {
-  std::chrono::high_resolution_clock::time_point begin, end;
-
-  options_.comparator = test::Uint64Comparator();
-  std::vector<char> data;
-  std::vector<uint64_t> seek_indices;
-  size_t results_count;
-  begin = std::chrono::high_resolution_clock::now();
-  GetDataBlocks(data, seek_indices, results_count);
-  end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<float, std::milli> elapsed = end - begin;
-  std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
-      << std::endl;
-  accelerator::FilterContext ctx = { accelerator::LESS, 50,};
-  std::vector<Slice> keys, values;
-  begin = std::chrono::high_resolution_clock::now();
-  FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
-  end = std::chrono::high_resolution_clock::now();
-  elapsed = end - begin;
-  std::cout << "[GPU][FilterAndDecodeDataBlocksOnGpu] Execution Time: "
-      << elapsed.count() << std::endl;
-  // std::cout << "Filter Results" << std::endl;
-  // for (size_t i = 0; i < keys.size(); ++i) {
-  //   std::cout << "keys[" << DecodeFixed64(keys[i].data())
-  //       << "] values[" << DecodeFixed64(values[i].data()) << "]"
-  //       << std::endl;
-  // }
-}
+//TEST_F(SstFileFilterReaderTest, FilterOnGpu) {
+//  std::chrono::high_resolution_clock::time_point begin, end;
+//
+//  options_.comparator = test::Uint64Comparator();
+//  std::vector<char> data;
+//  std::vector<uint64_t> seek_indices;
+//  size_t results_count;
+//  begin = std::chrono::high_resolution_clock::now();
+//  GetDataBlocks(data, seek_indices, results_count);
+//  end = std::chrono::high_resolution_clock::now();
+//  std::chrono::duration<float, std::milli> elapsed = end - begin;
+//  std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
+//      << std::endl;
+//  accelerator::FilterContext ctx = { accelerator::LESS, 50,};
+//  std::vector<Slice> keys, values;
+//  begin = std::chrono::high_resolution_clock::now();
+//  FilterDataBlocksOnGpu(data, seek_indices, ctx, results_count, keys, values);
+//  end = std::chrono::high_resolution_clock::now();
+//  elapsed = end - begin;
+//  std::cout << "[GPU][FilterAndDecodeDataBlocksOnGpu] Execution Time: "
+//      << elapsed.count() << std::endl;
+//  // std::cout << "Filter Results" << std::endl;
+//  // for (size_t i = 0; i < keys.size(); ++i) {
+//  //   std::cout << "keys[" << DecodeFixed64(keys[i].data())
+//  //       << "] values[" << DecodeFixed64(values[i].data()) << "]"
+//  //       << std::endl;
+//  // }
+//}
 
 TEST_F(SstFileFilterReaderTest, FilterOnAvx) {
   std::chrono::high_resolution_clock::time_point begin, end;
 
-  std::vector<int> values, results;
+  std::vector<long> values, results;
   accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
 
   options_.comparator = test::Uint64Comparator();
@@ -484,10 +484,13 @@ TEST_F(SstFileFilterReaderTest, FilterOnAvx) {
   ReadOptions ropts;
   SstFileFilterReader reader(options_);
   reader.Open(sst_name_);
+
   reader.VerifyChecksum();
   std::unique_ptr<Iterator> iter(reader.NewIterator(ropts));
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    values.emplace_back(atoi(iter->value().data()));
+    //values.emplace_back(atoi(iter->value().data()));
+	  std::cout << "key : " << iter->key().ToString(1) << std::endl;
+	  std::cout << "value : " << iter->value().ToString(1) << std::endl;
   }
   end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<float, std::milli> elapsed = end - begin;

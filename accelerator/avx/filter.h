@@ -14,7 +14,7 @@
 
 namespace avx {
 
-int simpleIntFilter(std::vector<int> &source, accelerator::FilterContext ctx,
-                    std::vector<int> &results);
+int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
+                    std::vector<long> &results);
 
 }  // namespace avx

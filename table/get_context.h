@@ -80,6 +80,8 @@ class GetContext {
   bool SaveValue(const ParsedInternalKey& parsed_key, const Slice& value,
                  bool* matched, Cleanable* value_pinner = nullptr);
 
+  bool checkTableRange(const ParsedInternalKey& parsed_key);
+
   // Simplified version of the previous function. Should only be used when we
   // know that the operation is a Put.
   void SaveValue(const Slice& value, SequenceNumber seq);
@@ -110,6 +112,9 @@ class GetContext {
   }
 
   void ReportCounters();
+  std::vector<PinnableSlice> *val_ptr() {
+	  return values;
+  }
 
  private:
   const Comparator* ucmp_;

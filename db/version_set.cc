@@ -1307,8 +1307,9 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
   }
 }
 
-void Version::ValueFilter(const ReadOptions& /*read_options*/,
+void Version::ValueFilter(const ReadOptions& read_options,
                           const LookupKey& k,
+						  const SlicewithSchema &schema,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
@@ -1365,13 +1366,13 @@ void Version::ValueFilter(const ReadOptions& /*read_options*/,
     f = fp.GetNextFile();
   }
 
-//  *status = table_cache_->Get(
-//      read_options, *internal_comparator(), *f->file_metadata, ikey,
-//      value, mutable_cf_options_.prefix_extractor.get(),
-//      cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
-//      IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
-//                      fp.IsHitFileLastInLevel()),
-//      fp.GetCurrentLevel());
+  *status = table_cache_->ValueFilter(
+      read_options, *internal_comparator(), fdlist, ikey, schema,
+      &get_context, mutable_cf_options_.prefix_extractor.get(),
+      cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
+      IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+                      fp.IsHitFileLastInLevel()),
+      fp.GetCurrentLevel());
 
   if (key_exists != nullptr)
       *key_exists = false;

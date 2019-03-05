@@ -572,7 +572,7 @@ class Version {
            SequenceNumber* seq = nullptr, ReadCallback* callback = nullptr,
            bool* is_blob = nullptr);
 
-  void ValueFilter(const ReadOptions&, const LookupKey& key,
+  void ValueFilter(const ReadOptions&, const LookupKey& key, const SlicewithSchema &schema,
                    std::vector<PinnableSlice> &value, Status* status,
                    MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,

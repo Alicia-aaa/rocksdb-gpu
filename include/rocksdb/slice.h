@@ -262,7 +262,7 @@ class PinnableSlice : public Slice, public Cleanable {
 class SlicewithSchema : public Slice, public Cleanable {
  public:
   SlicewithSchema(const char* d, size_t n, accelerator::FilterContext ctx,
-		  int idx, uint * type, uint * length)
+		  int idx, unsigned int * type, unsigned int * length)
  : Slice(d, n) {
 	  context = ctx;
 	  target_idx = idx;
@@ -274,31 +274,32 @@ class SlicewithSchema : public Slice, public Cleanable {
   SlicewithSchema(SlicewithSchema&) = delete;
   SlicewithSchema& operator=(SlicewithSchema&) = delete;
 
-  uint getType(uint index) {
-	  return field_type[index - 1];
+  unsigned int getType (unsigned int index) const  {
+	  return field_type[index];
   }
 
-  uint getLength(uint index) {
-	  return field_type[index - 1];
+  unsigned int getLength (unsigned int index) const  {
+	  return field_length[index];
   }
 
-  int getTarget() {
+  int getTarget() const {
 	  return target_idx;
   }
 
-  accelerator::Operator getOp() {
+  accelerator::Operator getOp() const {
 	  return context._op;
   }
 
-  long getPivot() {
+  long getPivot() const {
 	  return context._pivot;
   }
 
- private:
   accelerator::FilterContext context;
+
+ private:
   int target_idx;
-  uint * field_type;
-  uint * field_length;
+  unsigned int * field_type;
+  unsigned int * field_length;
 };
 
 // A set of Slices that are virtually concatenated together.  'parts' points

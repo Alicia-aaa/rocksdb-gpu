@@ -452,6 +452,9 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/accelerator)
+include_directories(${PROJECT_SOURCE_DIR}/accelerator/avx)
+include_directories(${PROJECT_SOURCE_DIR}/accelerator/cuda)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/gtest-1.7.0/fused-src)
 find_package(Threads REQUIRED)
 

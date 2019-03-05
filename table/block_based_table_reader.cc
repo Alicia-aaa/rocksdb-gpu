@@ -51,6 +51,7 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
+#include "accelerator/avx/filter.h"
 
 namespace rocksdb {
 
@@ -2657,6 +2658,178 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
         break;
       }
     }
+    if (matched && filter != nullptr && !filter->IsBlockBased()) {
+      RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_FULL_TRUE_POSITIVE);
+      PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_full_true_positive, 1,
+                                rep_->level);
+    }
+    if (s.ok()) {
+      s = iiter->status();
+    }
+  }
+
+  // if rep_->filter_entry is not set, we should call Release(); otherwise
+  // don't call, in this case we have a local copy in rep_->filter_entry,
+  // it's pinned to the cache and will be released in the destructor
+  if (!rep_->filter_entry.IsSet()) {
+    filter_entry.Release(rep_->table_options.block_cache.get());
+  }
+  return s;
+}
+
+Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice& key, const SlicewithSchema &schema,
+                            GetContext* get_context,
+                            const SliceTransform* prefix_extractor,
+                            bool skip_filters) {
+  assert(key.size() >= 8);  // key must be internal key
+  Status s;
+  const bool no_io = read_options.read_tier == kBlockCacheTier;
+  CachableEntry<FilterBlockReader> filter_entry;
+  if (!skip_filters) {
+    filter_entry =
+        GetFilter(prefix_extractor, /*prefetch_buffer*/ nullptr,
+                  read_options.read_tier == kBlockCacheTier, get_context);
+  }
+  FilterBlockReader* filter = filter_entry.value;
+
+  // First check the full filter
+  // If full filter not useful, Then go into each block
+  if (!FullFilterKeyMayMatch(read_options, filter, key, no_io,
+                             prefix_extractor)) {
+    RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_USEFUL);
+    PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_useful, 1, rep_->level);
+  } else {
+    IndexBlockIter iiter_on_stack;
+    // if prefix_extractor found in block differs from options, disable
+    // BlockPrefixIndex. Only do this check when index_type is kHashSearch.
+    bool need_upper_bound_check = false;
+    if (rep_->index_type == BlockBasedTableOptions::kHashSearch) {
+      need_upper_bound_check = PrefixExtractorChanged(
+          rep_->table_properties.get(), prefix_extractor);
+    }
+    auto iiter =
+        NewIndexIterator(read_options, need_upper_bound_check, &iiter_on_stack,
+                         /* index_entry */ nullptr, get_context);
+    std::unique_ptr<InternalIteratorBase<BlockHandle>> iiter_unique_ptr;
+    if (iiter != &iiter_on_stack) {
+      iiter_unique_ptr.reset(iiter);
+    }
+
+    bool matched = false;  // if such user key mathced a key in SST
+    bool done = false;
+    std::vector<long> values, results;
+    int target_idx = schema.getTarget();
+
+    for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
+      BlockHandle handle = iiter->value();
+      bool not_exist_in_filter =
+          filter != nullptr && filter->IsBlockBased() == true &&
+          !filter->KeyMayMatch(ExtractUserKey(key), prefix_extractor,
+                               handle.offset(), no_io);
+
+      if (not_exist_in_filter) {
+        // Not found
+        // TODO: think about interaction with Merge. If a user key cannot
+        // cross one data block, we should be fine.
+        RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_USEFUL);
+        PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_useful, 1, rep_->level);
+        break;
+       } else {
+        DataBlockIter biter;
+        NewDataBlockIterator<DataBlockIter>(
+            rep_, read_options, iiter->value(), &biter, false,
+            true /* key_includes_seq */, get_context);
+
+      if (read_options.read_tier == kBlockCacheTier &&
+            biter.status().IsIncomplete()) {
+          // couldn't get block from block_cache
+          // Update Saver.state to Found because we are only looking for
+          // whether we can guarantee the key is not there when "no_io" is set
+          get_context->MarkKeyMayExist();
+          break;
+      }
+
+      if (!biter.status().ok()) {
+          s = biter.status();
+          break;
+      }
+
+      bool may_exist = biter.SeekForGet(key);
+      if (!may_exist) {
+          // HashSeek cannot find the key this block and the the iter is not
+          // the end of the block, i.e. cannot be in the following blocks
+          // either. In this case, the seek_key cannot be found, so we break
+          // from the top level for-loop.
+          break;
+      }
+
+        // Call the *saver function on each entry/block until it returns false
+      for (; biter.Valid(); biter.Next()) {
+        ParsedInternalKey parsed_key;
+        if (!ParseInternalKey(biter.key(), &parsed_key)) {
+          s = Status::Corruption(Slice());
+        }
+
+        const char *m_ptr = biter.value().data_;
+
+        if (target_idx == -1) {
+          std::string *buf = new std::string("");
+          buf->assign(biter.value().data_, biter.value().size_);
+
+          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(buf)));
+
+        } else {
+
+        for(int i = 0; i < target_idx; i++) {
+          if(schema.getType(i) == 15) {
+            uint data_len;
+            if(schema.getLength(i) == 1) {
+        	  data_len = (unsigned char)m_ptr[0];
+        	} else {
+        	  data_len = (unsigned short)(*((unsigned short *)(m_ptr)));
+        	}
+        	  m_ptr += data_len;
+        	} else {
+        		m_ptr += schema.getLength(i);
+        	}
+        }
+
+        uint len = 0;
+
+    	if(schema.getType(schema.getTarget()) == 15) {
+    	  if(schema.getLength(schema.getTarget()) == 1) {
+    	    len = (unsigned char)m_ptr[0];
+    	  } else {
+    		len = (unsigned short)(*((unsigned short *)(m_ptr)));
+    	  }
+    	} else {
+    		len = schema.getLength(schema.getTarget());
+    	}
+
+    	unsigned char* str = new unsigned char[len];
+        memcpy(str, m_ptr, len * sizeof(unsigned char));
+        long j = (int)(*((int *)(str)));
+        std::cout<< "long call " << j << std::endl;
+
+        values.push_back(j);
+
+        }
+
+        if(!get_context->checkTableRange(parsed_key)) {
+        	done = true;
+        	break;
+        }
+      }
+        s = biter.status();
+      }
+      if (done) {
+        // Avoid the extra Next which is expensive in two-level indexes
+        break;
+      }
+    }
+
+    avx::simpleIntFilter(values, schema.context, results);
+
     if (matched && filter != nullptr && !filter->IsBlockBased()) {
       RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_FULL_TRUE_POSITIVE);
       PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_full_true_positive, 1,

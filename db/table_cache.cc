@@ -418,6 +418,66 @@ Status TableCache::Get(const ReadOptions& options,
   return s;
 }
 
+Status TableCache::ValueFilter(const ReadOptions& options,
+                       const InternalKeyComparator& internal_comparator,
+                       std::vector<FdWithKeyRange *> fdlist, const Slice& k, const SlicewithSchema &schema,
+                       GetContext* get_context,
+                       const SliceTransform* prefix_extractor,
+                       HistogramImpl* file_read_hist, bool skip_filters,
+                       int level) {
+  std::vector<FdWithKeyRange *>::iterator iter;
+  Status s;
+
+  for(iter=fdlist.begin(); iter!=fdlist.end(); ++iter) {
+
+  auto& fd = (*iter)->file_metadata->fd;
+		  //file_meta.fd;
+  std::string* row_cache_entry = nullptr;
+  bool done = false;
+
+  TableReader* t = fd.table_reader;
+  Cache::Handle* handle = nullptr;
+  if (!done && s.ok()) {
+    if (t == nullptr) {
+      s = FindTable(
+          env_options_, internal_comparator, fd, &handle, prefix_extractor,
+          options.read_tier == kBlockCacheTier /* no_io */,
+          true /* record_read_stats */, file_read_hist, skip_filters, level);
+      if (s.ok()) {
+        t = GetTableReaderFromHandle(handle);
+      }
+    }
+    SequenceNumber* max_covering_tombstone_seq =
+        get_context->max_covering_tombstone_seq();
+    if (s.ok() && max_covering_tombstone_seq != nullptr &&
+        !options.ignore_range_deletions) {
+      std::unique_ptr<FragmentedRangeTombstoneIterator> range_del_iter(
+          t->NewRangeTombstoneIterator(options));
+      if (range_del_iter != nullptr) {
+        *max_covering_tombstone_seq = std::max(
+            *max_covering_tombstone_seq,
+            range_del_iter->MaxCoveringTombstoneSeqnum(ExtractUserKey(k)));
+      }
+    }
+    if (s.ok()) {
+      get_context->SetReplayLog(row_cache_entry);  // nullptr if no cache.
+      s = t->ValueFilter(options, k, schema, get_context, prefix_extractor, skip_filters);
+      get_context->SetReplayLog(nullptr);
+    } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
+      // Couldn't find Table in cache but treat as kFound if no_io set
+      get_context->MarkKeyMayExist();
+      s = Status::OK();
+      done = true;
+    }
+  }
+
+  if (handle != nullptr) {
+    ReleaseHandle(handle);
+  }
+  }
+  return s;
+}
+
 Status TableCache::GetTableProperties(
     const EnvOptions& env_options,
     const InternalKeyComparator& internal_comparator, const FileDescriptor& fd,

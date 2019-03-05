@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "db/builder.h"
 #include "db/compaction_job.h"
@@ -1343,6 +1344,8 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
 
+  std::cout << "ValueFilter Impl called" << std::endl;
+
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
 
@@ -1431,7 +1434,7 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   if (!done) {
     PERF_TIMER_GUARD(get_from_output_files_time);
-    sv->current->ValueFilter(read_options, lkey, pinnable_val, &s,
+    sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
                              &merge_context, &max_covering_tombstone_seq,
                              value_found, nullptr, nullptr, callback,
                              is_blob_index);

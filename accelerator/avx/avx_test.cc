@@ -10,7 +10,7 @@
 #include "accelerator/common.h"
 #include "accelerator/avx/filter.h"
 
-int createRandomNumbers(std::vector<int> &source, const uint64_t kCount,
+int createRandomNumbers(std::vector<long> &source, const uint64_t kCount,
                         const int kMin, const int kMax) {
   std::random_device rd;
   std::mt19937 generator(rd());
@@ -28,8 +28,8 @@ int createRandomNumbers(std::vector<int> &source, const uint64_t kCount,
   return accelerator::ACC_OK;
 }
 
-int cpuFilter(std::vector<int> &source, accelerator::FilterContext ctx,
-              std::vector<int> &results) {
+int cpuFilter(std::vector<long> &source, accelerator::FilterContext ctx,
+              std::vector<long> &results) {
   results.resize(source.size());
   for (int i = 0; i < source.size(); ++i) {
     results[i] = ctx(source[i]);
@@ -51,8 +51,8 @@ int main() {
   const int kMin = 0;
   const int kMax = 100;
 
-  std::vector<int> values;
-  std::vector<int> results;
+  std::vector<long> values;
+  std::vector<long> results;
 
   createRandomNumbers(values, kCount, kMin, kMax);
   std::cout << "[FILTER_TEST] Test Numbers" << std::endl;

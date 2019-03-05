@@ -348,7 +348,7 @@ class DB {
                              const SlicewithSchema& /*key*/,
                              std::vector<PinnableSlice>& /*value*/) {
     return Status();
-  };
+  }
 
   // If keys[i] does not exist in the database, then the i'th returned
   // status will be one for which Status::IsNotFound() is true, and

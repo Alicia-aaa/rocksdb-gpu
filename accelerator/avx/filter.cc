@@ -6,8 +6,8 @@
 
 namespace avx {
 
-int simpleIntFilter(std::vector<int> &source, accelerator::FilterContext ctx,
-                    std::vector<int> &results) {
+int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
+                    std::vector<long> &results) {
   results.resize(source.size());
   uint64_t pivot = static_cast<uint64_t>(ctx._pivot);
   int size = (int) source.size();

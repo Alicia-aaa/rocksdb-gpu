@@ -1344,8 +1344,6 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
 
-  std::cout << "ValueFilter Impl called" << std::endl;
-
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
 

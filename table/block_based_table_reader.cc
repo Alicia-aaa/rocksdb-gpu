@@ -2719,6 +2719,8 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
     bool done = false;
     std::vector<long> values, results;
     int target_idx = schema.getTarget();
+    std::vector<PinnableSlice > * ret = get_context->val_ptr();
+    int prev_size = ret->size();
 
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
@@ -2770,15 +2772,19 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
           s = Status::Corruption(Slice());
         }
 
+        if(!get_context->checkTableRange(parsed_key)) {
+        	done = true;
+        	break;
+        }
+
         const char *m_ptr = biter.value().data_;
 
-        if (target_idx == -1) {
-          std::string *buf = new std::string("");
-          buf->assign(biter.value().data_, biter.value().size_);
+        std::string *buf = new std::string("");
+        buf->assign(biter.value().data_, biter.value().size_);
+        ret->emplace_back(std::move(PinnableSlice(buf)));
 
-          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(buf)));
+        if (target_idx != -1) {
 
-        } else {
 
         for(int i = 0; i < target_idx; i++) {
           if(schema.getType(i) == 15) {
@@ -2815,10 +2821,6 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
 
         }
 
-        if(!get_context->checkTableRange(parsed_key)) {
-        	done = true;
-        	break;
-        }
       }
         s = biter.status();
       }
@@ -2828,7 +2830,16 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
       }
     }
 
-    avx::simpleIntFilter(values, schema.context, results);
+    if(target_idx != -1)
+      avx::simpleIntFilter(values, schema.context, results);
+
+
+    for(unsigned int i = 0; i < results.size(); i++) {
+    	std::cout << "results : [" << i << "] " << results[i] << std::endl;
+    	if(results[i] == 0) {
+    		ret->erase(ret->begin() + prev_size + i);
+    	}
+    }
 
     if (matched && filter != nullptr && !filter->IsBlockBased()) {
       RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_FULL_TRUE_POSITIVE);

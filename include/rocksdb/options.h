@@ -16,6 +16,7 @@
 #include <limits>
 #include <unordered_map>
 
+#include "accelerator/common.h"
 #include "rocksdb/advanced_options.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/env.h"
@@ -1169,8 +1170,13 @@ struct ReadOptions {
   // Default: 0 (don't filter by seqnum, return user keys)
   SequenceNumber iter_start_seqnum;
 
+  // GPU Accelerate
+  // Value Filter mode (AVX, GPU, NORMAL)
+  accelerator::ValueFilterMode value_filter_mode;
+
   ReadOptions();
   ReadOptions(bool cksum, bool cache);
+  ReadOptions(accelerator::ValueFilterMode mode);
 };
 
 // Options that control write operations

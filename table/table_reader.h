@@ -94,10 +94,20 @@ class TableReader {
                      const SliceTransform* prefix_extractor,
                      bool skip_filters = false) = 0;
 
-  virtual Status ValueFilter(const ReadOptions& /*readOptions*/, const Slice& /*key*/, const SlicewithSchema &/*schema*/,
-                     GetContext* /*get_context*/,
-                     const SliceTransform* /*prefix_extractor*/,
-                     bool /*skip_filters = false*/) { return Status::OK(); }
+  // virtual Status ValueFilter(const ReadOptions& /*readOptions*/, const Slice& /*key*/, const SlicewithSchema &/*schema*/,
+  //                    GetContext* /*get_context*/,
+  //                    const SliceTransform* /*prefix_extractor*/,
+  //                    bool /*skip_filters = false*/) { return Status::OK(); }
+
+  // Ruda
+  virtual Status AvxFilter(const ReadOptions& /* readOptions */,
+                           const Slice& /* key */,
+                           const SlicewithSchema& /* schema_key */,
+                           GetContext* /* get_context */,
+                           const SliceTransform* /* prefix_extractor */,
+                           bool /* skip_filters*/) {
+    return Status();
+  }
 
   // Prefetch data corresponding to a give range of keys
   // Typically this functionality is required for table implementations that

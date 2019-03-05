@@ -22,6 +22,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "accelerator/common.h"
 #include "db/compaction.h"
 #include "db/internal_stats.h"
 #include "db/log_reader.h"
@@ -1308,8 +1310,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 }
 
 void Version::ValueFilter(const ReadOptions& read_options,
-                          const LookupKey& k,
-						  const SlicewithSchema &schema,
+                          const LookupKey& k, const SlicewithSchema& schema_k,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
@@ -1343,7 +1344,11 @@ void Version::ValueFilter(const ReadOptions& read_options,
       storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
       user_comparator(), internal_comparator());
   FdWithKeyRange* f = fp.GetNextFile();
-  std::vector<FdWithKeyRange *> fdlist;
+
+  std::vector<HistogramImpl *> fd_read_hists;
+  std::vector<bool> fd_skip_filters;
+  std::vector<FdWithKeyRange *> fds;
+  std::vector<int> fd_levels;
 
   while (f != nullptr) {
     if (*max_covering_tombstone_seq > 0) {
@@ -1362,22 +1367,36 @@ void Version::ValueFilter(const ReadOptions& read_options,
                                 fp.GetCurrentLevel());
     }
 
-    fdlist.emplace_back(f);
+    fd_read_hists.push_back(
+        cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
+    fd_skip_filters.push_back(
+        IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+                        fp.IsHitFileLastInLevel()));
+    fd_levels.push_back(fp.GetCurrentLevel());
+    fds.push_back(f);
     f = fp.GetNextFile();
   }
 
+  // *status = table_cache_->ValueFilter(
+  //     read_options, *internal_comparator(), fdlist, ikey, schema,
+  //     &get_context, mutable_cf_options_.prefix_extractor.get(),
+  //     cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
+  //     IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+  //                     fp.IsHitFileLastInLevel()),
+  //     fp.GetCurrentLevel());
+
+  // Set ValueFilterMode to AVX
+  ReadOptions vf_read_options = read_options;
+  vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;
+
+  *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilter(
-      read_options, *internal_comparator(), fdlist, ikey, schema,
-      &get_context, mutable_cf_options_.prefix_extractor.get(),
-      cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
-      IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
-                      fp.IsHitFileLastInLevel()),
-      fp.GetCurrentLevel());
+      vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
+      mutable_cf_options_.prefix_extractor.get(), fds, fd_read_hists,
+      fd_skip_filters, fd_levels);
 
   if (key_exists != nullptr)
       *key_exists = false;
-
-     *status = Status::NotFound(); // Use an empty error message for speed
 }
 
 bool Version::IsFilterSkipped(int level, bool is_file_last_in_level) {

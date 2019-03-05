@@ -14,6 +14,7 @@
 #include "db/version_edit.h"
 #include "util/filename.h"
 
+#include "accelerator/avx/filter.h"
 #include "monitoring/perf_context_imp.h"
 #include "rocksdb/statistics.h"
 #include "table/get_context.h"
@@ -418,62 +419,145 @@ Status TableCache::Get(const ReadOptions& options,
   return s;
 }
 
-Status TableCache::ValueFilter(const ReadOptions& options,
-                       const InternalKeyComparator& internal_comparator,
-                       std::vector<FdWithKeyRange *> fdlist, const Slice& k, const SlicewithSchema &schema,
+// Status TableCache::ValueFilter(const ReadOptions& options,
+//                        const InternalKeyComparator& internal_comparator,
+//                        std::vector<FdWithKeyRange *> fdlist, const Slice& k, const SlicewithSchema &schema,
+//                        GetContext* get_context,
+//                        const SliceTransform* prefix_extractor,
+//                        HistogramImpl* file_read_hist, bool skip_filters,
+//                        int level) {
+//   std::vector<FdWithKeyRange *>::iterator iter;
+//   Status s;
+
+//   for(iter=fdlist.begin(); iter!=fdlist.end(); ++iter) {
+
+//     auto& fd = (*iter)->file_metadata->fd;
+//         //file_meta.fd;
+//     std::string* row_cache_entry = nullptr;
+//     bool done = false;
+
+//     TableReader* t = fd.table_reader;
+//     Cache::Handle* handle = nullptr;
+//     if (!done && s.ok()) {
+//       if (t == nullptr) {
+//         s = FindTable(
+//             env_options_, internal_comparator, fd, &handle, prefix_extractor,
+//             options.read_tier == kBlockCacheTier /* no_io */,
+//             true /* record_read_stats */, file_read_hist, skip_filters, level);
+//         if (s.ok()) {
+//           t = GetTableReaderFromHandle(handle);
+//         }
+//       }
+//       SequenceNumber* max_covering_tombstone_seq =
+//           get_context->max_covering_tombstone_seq();
+//       if (s.ok() && max_covering_tombstone_seq != nullptr &&
+//           !options.ignore_range_deletions) {
+//         std::unique_ptr<FragmentedRangeTombstoneIterator> range_del_iter(
+//             t->NewRangeTombstoneIterator(options));
+//         if (range_del_iter != nullptr) {
+//           *max_covering_tombstone_seq = std::max(
+//               *max_covering_tombstone_seq,
+//               range_del_iter->MaxCoveringTombstoneSeqnum(ExtractUserKey(k)));
+//         }
+//       }
+//       if (s.ok()) {
+//         get_context->SetReplayLog(row_cache_entry);  // nullptr if no cache.
+//         s = t->ValueFilter(options, k, schema, get_context, prefix_extractor, skip_filters);
+//         get_context->SetReplayLog(nullptr);
+//       } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
+//         // Couldn't find Table in cache but treat as kFound if no_io set
+//         get_context->MarkKeyMayExist();
+//         s = Status::OK();
+//         done = true;
+//       }
+//     }
+
+//     if (handle != nullptr) {
+//       ReleaseHandle(handle);
+//     }
+//     return s;
+//   }
+// }
+
+Status _ValueFilterAVX(const ReadOptions& options,
+                       const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       const SliceTransform* prefix_extractor,
-                       HistogramImpl* file_read_hist, bool skip_filters,
-                       int level) {
-  std::vector<FdWithKeyRange *>::iterator iter;
+                       std::vector<TableReader *> readers,
+                       std::vector<bool> reader_skip_filters,
+                       const SliceTransform *prefix_extractor) {
   Status s;
+  for (size_t i = 0; i < readers.size(); ++i) {
+    TableReader *reader = readers[i];
+    bool skip_filters = reader_skip_filters[i];
+    reader->AvxFilter(
+        options, k, schema_k, get_context, prefix_extractor, skip_filters);
+  }
+  return s;
+}
 
-  for(iter=fdlist.begin(); iter!=fdlist.end(); ++iter) {
+// Status _ValueFilterGPU(const ReadOptions& options,
+//                        const Slice& k, const SlicewithSchema& schema_k,
+//                        GetContext* get_context,
+//                        std::vector<TableReader *> readers) {
+//   Status s;
+//   // TODO(totoro): Implements GPU value filtering...
+//   return s;
+// }
 
-  auto& fd = (*iter)->file_metadata->fd;
-		  //file_meta.fd;
-  std::string* row_cache_entry = nullptr;
-  bool done = false;
+Status TableCache::ValueFilter(const ReadOptions& options,
+                               const InternalKeyComparator& internal_comparator,
+                               const Slice& /*k*/, const SlicewithSchema& /*schema_k*/,
+                               GetContext* /*get_context*/,
+                               const SliceTransform* prefix_extractor,
+                               std::vector<FdWithKeyRange *> fds,
+                               std::vector<HistogramImpl *> fd_read_hists,
+                               std::vector<bool> fd_skip_filters,
+                               std::vector<int> fd_levels) {
+  Status s;
+  size_t fd_count = fds.size();
 
-  TableReader* t = fd.table_reader;
-  Cache::Handle* handle = nullptr;
-  if (!done && s.ok()) {
+  std::vector<Cache::Handle *> handles;
+  std::vector<TableReader *> readers;
+  std::vector<bool> reader_skip_filters;
+
+  for (size_t i = 0; i < fd_count; ++i) {
+    auto &fd = fds[i]->file_metadata->fd;
+    HistogramImpl *fd_read_hist = fd_read_hists[i];
+    bool fd_skip_filter = fd_skip_filters[i];
+    int fd_level = fd_levels[i];
+    TableReader* t = fd.table_reader;
     if (t == nullptr) {
+      Cache::Handle *handle = nullptr;
       s = FindTable(
           env_options_, internal_comparator, fd, &handle, prefix_extractor,
           options.read_tier == kBlockCacheTier /* no_io */,
-          true /* record_read_stats */, file_read_hist, skip_filters, level);
+          true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
       if (s.ok()) {
         t = GetTableReaderFromHandle(handle);
+        handles.push_back(handle);
+        readers.push_back(t);
+        reader_skip_filters.push_back(fd_skip_filter);
       }
-    }
-    SequenceNumber* max_covering_tombstone_seq =
-        get_context->max_covering_tombstone_seq();
-    if (s.ok() && max_covering_tombstone_seq != nullptr &&
-        !options.ignore_range_deletions) {
-      std::unique_ptr<FragmentedRangeTombstoneIterator> range_del_iter(
-          t->NewRangeTombstoneIterator(options));
-      if (range_del_iter != nullptr) {
-        *max_covering_tombstone_seq = std::max(
-            *max_covering_tombstone_seq,
-            range_del_iter->MaxCoveringTombstoneSeqnum(ExtractUserKey(k)));
-      }
-    }
-    if (s.ok()) {
-      get_context->SetReplayLog(row_cache_entry);  // nullptr if no cache.
-      s = t->ValueFilter(options, k, schema, get_context, prefix_extractor, skip_filters);
-      get_context->SetReplayLog(nullptr);
-    } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
-      // Couldn't find Table in cache but treat as kFound if no_io set
-      get_context->MarkKeyMayExist();
-      s = Status::OK();
-      done = true;
+    } else {
+      readers.push_back(t);
+      reader_skip_filters.push_back(fd_skip_filter);
     }
   }
 
-  if (handle != nullptr) {
-    ReleaseHandle(handle);
+  switch (options.value_filter_mode) {
+    case accelerator::ValueFilterMode::AVX:
+      // s = _ValueFilterAVX(options, k, schema_k, get_context, readers);
+      break;
+    case accelerator::ValueFilterMode::GPU:
+      // s = _ValueFilterGPU(options, k, schema_k, get_context, readers);
+      break;
+    case accelerator::ValueFilterMode::NORMAL:
+    default:
+      break;
   }
+
+  for (auto handle : handles) {
+    ReleaseHandle(handle);
   }
   return s;
 }

@@ -1609,7 +1609,7 @@ memtable_list_test: db/memtable_list_test.o $(LIBOBJECTS) $(TESTHARNESS) $(CUDAO
 write_callback_test: db/write_callback_test.o $(LIBOBJECTS) $(TESTHARNESS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
 	$(AM_LINK)
 
-heap_test: util/heap_test.o $(GTEST) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
+heap_test: util/heap_test.o $(GTEST) $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
 	$(AM_LINK)
 
 transaction_test: utilities/transactions/transaction_test.o $(LIBOBJECTS) $(TESTHARNESS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)

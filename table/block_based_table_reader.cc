@@ -16,6 +16,8 @@
 #include <vector>
 #include <iostream>
 
+#include "accelerator/avx/filter.h"
+
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
 
@@ -2677,10 +2679,12 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
   return s;
 }
 
-Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice& key, const SlicewithSchema &schema,
-                            GetContext* get_context,
-                            const SliceTransform* prefix_extractor,
-                            bool skip_filters) {
+Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
+                                  const Slice& key,
+                                  const SlicewithSchema& schema_key,
+                                  GetContext* get_context,
+                                  const SliceTransform* prefix_extractor,
+                                  bool skip_filters) {
   assert(key.size() >= 8);  // key must be internal key
   Status s;
   const bool no_io = read_options.read_tier == kBlockCacheTier;
@@ -2715,12 +2719,8 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
       iiter_unique_ptr.reset(iiter);
     }
 
-    bool matched = false;  // if such user key mathced a key in SST
     bool done = false;
-    std::vector<long> values, results;
-    int target_idx = schema.getTarget();
-    std::vector<PinnableSlice > * ret = get_context->val_ptr();
-    int prev_size = ret->size();
+    std::vector<PinnableSlice> records;
 
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
@@ -2736,11 +2736,11 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
         RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_USEFUL);
         PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_useful, 1, rep_->level);
         break;
-       } else {
-        DataBlockIter biter;
-        NewDataBlockIterator<DataBlockIter>(
-            rep_, read_options, iiter->value(), &biter, false,
-            true /* key_includes_seq */, get_context);
+      }
+      DataBlockIter biter;
+      NewDataBlockIterator<DataBlockIter>(
+          rep_, read_options, iiter->value(), &biter, false,
+          true /* key_includes_seq */, get_context);
 
       if (read_options.read_tier == kBlockCacheTier &&
             biter.status().IsIncomplete()) {
@@ -2765,7 +2765,7 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
           break;
       }
 
-        // Call the *saver function on each entry/block until it returns false
+      // Call the *saver function on each entry/block until it returns false
       for (; biter.Valid(); biter.Next()) {
         ParsedInternalKey parsed_key;
         if (!ParseInternalKey(biter.key(), &parsed_key)) {
@@ -2773,79 +2773,27 @@ Status BlockBasedTable::ValueFilter(const ReadOptions& read_options, const Slice
         }
 
         if(!get_context->checkTableRange(parsed_key)) {
-        	done = true;
-        	break;
+          done = true;
+          break;
         }
 
-        const char *m_ptr = biter.value().data_;
-
-        std::string *buf = new std::string("");
-        buf->assign(biter.value().data_, biter.value().size_);
-        ret->emplace_back(std::move(PinnableSlice(buf)));
-
-        if (target_idx != -1) {
-
-
-        for(int i = 0; i < target_idx; i++) {
-          if(schema.getType(i) == 15) {
-            uint data_len;
-            if(schema.getLength(i) == 1) {
-        	  data_len = (unsigned char)m_ptr[0];
-        	} else {
-        	  data_len = (unsigned short)(*((unsigned short *)(m_ptr)));
-        	}
-        	  m_ptr += data_len;
-        	} else {
-        		m_ptr += schema.getLength(i);
-        	}
-        }
-
-        uint len = 0;
-
-    	if(schema.getType(schema.getTarget()) == 15) {
-    	  if(schema.getLength(schema.getTarget()) == 1) {
-    	    len = (unsigned char)m_ptr[0];
-    	  } else {
-    		len = (unsigned short)(*((unsigned short *)(m_ptr)));
-    	  }
-    	} else {
-    		len = schema.getLength(schema.getTarget());
-    	}
-
-    	unsigned char* str = new unsigned char[len];
-        memcpy(str, m_ptr, len * sizeof(unsigned char));
-        long j = (int)(*((int *)(str)));
-        std::cout<< "long call " << j << std::endl;
-
-        values.push_back(j);
-
-        }
-
+        std::string *buf = new std::string(
+            biter.value().data_, biter.value().size_);
+        records.emplace_back(std::move(PinnableSlice(buf)));
       }
-        s = biter.status();
-      }
+      s = biter.status();
+
       if (done) {
         // Avoid the extra Next which is expensive in two-level indexes
         break;
       }
     }
 
-    if(target_idx != -1)
-      avx::simpleIntFilter(values, schema.context, results);
-
-
-    for(unsigned int i = 0; i < results.size(); i++) {
-    	std::cout << "results : [" << i << "] " << results[i] << std::endl;
-    	if(results[i] == 0) {
-    		ret->erase(ret->begin() + prev_size + i);
-    	}
+    if (schema_key.getTarget() != -1) {
+      avx::recordIntFilter(
+          records, schema_key, *get_context->val_ptr());
     }
 
-    if (matched && filter != nullptr && !filter->IsBlockBased()) {
-      RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_FULL_TRUE_POSITIVE);
-      PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_full_true_positive, 1,
-                                rep_->level);
-    }
     if (s.ok()) {
       s = iiter->status();
     }

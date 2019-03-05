@@ -76,13 +76,25 @@ class TableCache {
              HistogramImpl* file_read_hist = nullptr, bool skip_filters = false,
              int level = -1);
 
+  // Status ValueFilter(const ReadOptions& options,
+  //                    const InternalKeyComparator& internal_comparator,
+  //                    std::vector<FdWithKeyRange *> fdlist, const Slice& k,
+  //                    const SlicewithSchema &schema,
+  //                    GetContext* get_context,
+  //                    const SliceTransform* prefix_extractor = nullptr,
+  //                    HistogramImpl* file_read_hist = nullptr,
+  //                    bool skip_filters = false,
+  //                    int level = -1);
+
   Status ValueFilter(const ReadOptions& options,
-             const InternalKeyComparator& internal_comparator,
-			 std::vector<FdWithKeyRange *> fdlist, const Slice& k, const SlicewithSchema &schema,
-             GetContext* get_context,
-             const SliceTransform* prefix_extractor = nullptr,
-             HistogramImpl* file_read_hist = nullptr, bool skip_filters = false,
-             int level = -1);
+                     const InternalKeyComparator& internal_comparator,
+                     const Slice& k, const SlicewithSchema& schema_k,
+                     GetContext* get_context,
+                     const SliceTransform* prefix_extractor,
+                     std::vector<FdWithKeyRange *> fds,
+                     std::vector<HistogramImpl *> fd_read_hists,
+                     std::vector<bool> fd_skip_filters,
+                     std::vector<int> fd_levels);
 
   // Evict any entry for the specified file number
   static void Evict(Cache* cache, uint64_t file_number);

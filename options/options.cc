@@ -561,7 +561,8 @@ ReadOptions::ReadOptions()
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       ignore_range_deletions(false),
-      iter_start_seqnum(0) {}
+      iter_start_seqnum(0),
+      value_filter_mode(accelerator::ValueFilterMode::NORMAL) {}
 
 ReadOptions::ReadOptions(bool cksum, bool cache)
     : snapshot(nullptr),
@@ -579,6 +580,27 @@ ReadOptions::ReadOptions(bool cksum, bool cache)
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       ignore_range_deletions(false),
-      iter_start_seqnum(0) {}
+      iter_start_seqnum(0),
+      value_filter_mode(accelerator::ValueFilterMode::NORMAL) {}
+
+// GPU Accelerate
+ReadOptions::ReadOptions(accelerator::ValueFilterMode mode)
+    : snapshot(nullptr),
+      iterate_lower_bound(nullptr),
+      iterate_upper_bound(nullptr),
+      readahead_size(0),
+      max_skippable_internal_keys(0),
+      read_tier(kReadAllTier),
+      verify_checksums(true),
+      fill_cache(true),
+      tailing(false),
+      managed(false),
+      total_order_seek(false),
+      prefix_same_as_start(false),
+      pin_data(false),
+      background_purge_on_iterator_cleanup(false),
+      ignore_range_deletions(false),
+      iter_start_seqnum(0),
+      value_filter_mode(mode) {}
 
 }  // namespace rocksdb

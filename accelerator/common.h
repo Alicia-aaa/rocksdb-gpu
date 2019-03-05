@@ -16,6 +16,10 @@ namespace accelerator {
 const int ACC_ERR = 1;
 const int ACC_OK = 0;
 
+enum class ValueFilterMode {
+  NORMAL = 0, AVX, GPU,
+};
+
 enum Operator {
   EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ, INVALID
 };

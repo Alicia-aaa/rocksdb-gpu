@@ -1408,42 +1408,35 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   bool skip_memtable = (read_options.read_tier == kPersistedTier &&
                         has_unpersisted_data_.load(std::memory_order_relaxed));
-  bool done = false;
   if (!skip_memtable) {
-    if (sv->mem->ValueFilter(lkey, pinnable_val, &s, &merge_context,
-                             &max_covering_tombstone_seq, read_options,
-                             callback, is_blob_index)) {
-      done = true;
-      //pinnable_val->PinSelf();
-      RecordTick(stats_, MEMTABLE_HIT);
-    } else if ((s.ok() || s.IsMergeInProgress()) &&
-               sv->imm->ValueFilter(lkey, pinnable_val, &s, &merge_context,
-                                    &max_covering_tombstone_seq, read_options,
-                                    callback, is_blob_index)) {
-      done = true;
-      //pinnable_val->PinSelf();
+    sv->mem->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+                         &max_covering_tombstone_seq, read_options,
+                         callback, is_blob_index);
+    if (s.ok()) {
       RecordTick(stats_, MEMTABLE_HIT);
     }
-    if (!done && !s.ok() && !s.IsMergeInProgress()) {
+    sv->imm->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+                         &max_covering_tombstone_seq, read_options,
+                         callback, is_blob_index);
+    if (s.ok()) {
+      RecordTick(stats_, MEMTABLE_HIT);
+    }
+    if (!s.ok() && !s.IsMergeInProgress()) {
       ReturnAndCleanupSuperVersion(cfd, sv);
       return s;
     }
   }
 
-  if (!done) {
-    PERF_TIMER_GUARD(get_from_output_files_time);
-    sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
-                             &merge_context, &max_covering_tombstone_seq,
-                             value_found, nullptr, nullptr, callback,
-                             is_blob_index);
-    RecordTick(stats_, MEMTABLE_MISS);
-  }
+  PERF_TIMER_GUARD(get_from_output_files_time);
+  sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
+                           &merge_context, &max_covering_tombstone_seq,
+                           value_found, nullptr, nullptr, callback,
+                           is_blob_index);
+  RecordTick(stats_, MEMTABLE_MISS);
 
   {
     PERF_TIMER_GUARD(get_post_process_time);
-
     ReturnAndCleanupSuperVersion(cfd, sv);
-
     RecordTick(stats_, NUMBER_KEYS_READ);
   }
   return s;

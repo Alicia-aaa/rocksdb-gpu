@@ -12,8 +12,12 @@
 
 namespace accelerator {
 
-long convertRecord(const rocksdb::SlicewithSchema &schema_key,
-                   const char *record_ptr) {
+inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
+                          const char *record_ptr) {
+  if (schema_key.getTarget() < 0) {
+    return -1;
+  }
+
   // printf("[util.h][convertRecord] START\n");
   // Skip other columns...
   for (int i = 0; i < schema_key.getTarget(); ++i) {

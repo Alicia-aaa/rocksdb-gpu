@@ -17,6 +17,7 @@
 #include <iostream>
 
 #include "accelerator/avx/filter.h"
+#include "accelerator/util.h"
 
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
@@ -2800,6 +2801,10 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
         get_context->val_ptr()->emplace_back(
             std::move(PinnableSlice(record.data_, record.size_)));
       }
+    }
+    for (auto &result : *get_context->val_ptr()) {
+      long col_value = accelerator::convertRecord(schema_key, result.data_);
+      std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
     }
 
     if (s.ok()) {

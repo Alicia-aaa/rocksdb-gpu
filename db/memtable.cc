@@ -1000,7 +1000,6 @@ bool MemTable::ValueFilter(const LookupKey& key,
   printf("ValueFilter in memory Called End\n");
   std::vector<PinnableSlice>::iterator iter;
   for(iter=value.begin(); iter != value.end(); iter++) {
-	  (*iter).PinSelf();
 	  std::cout << "end " << (*iter).ToString(1) << std::endl;
   }
 

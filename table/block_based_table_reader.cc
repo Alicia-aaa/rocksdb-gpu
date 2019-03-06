@@ -2720,7 +2720,7 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
     }
 
     bool done = false;
-    std::vector<PinnableSlice> records;
+    std::vector<Slice> records;
 
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
@@ -2777,9 +2777,10 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
           break;
         }
 
-        std::string *buf = new std::string(
-            biter.value().data_, biter.value().size_);
-        records.emplace_back(std::move(PinnableSlice(buf)));
+        records.emplace_back(biter.value().data_, biter.value().size_);
+        std::cout << "[BlockBasedTable::AvxFilter] Data: "
+            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
+            << std::endl;
       }
       s = biter.status();
 
@@ -2790,8 +2791,15 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
     }
 
     if (schema_key.getTarget() != -1) {
+      std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
       avx::recordIntFilter(
           records, schema_key, *get_context->val_ptr());
+    } else {
+      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+      for (auto &record : records) {
+        get_context->val_ptr()->emplace_back(
+            std::move(PinnableSlice(record.data_, record.size_)));
+      }
     }
 
     if (s.ok()) {

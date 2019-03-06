@@ -70,18 +70,46 @@ int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
   return accelerator::ACC_OK;
 }
 
-int recordIntFilter(std::vector<rocksdb::PinnableSlice> &raw_records,
+int _recordNativeIntFilter(std::vector<rocksdb::Slice> &raw_records,
+                           const rocksdb::SlicewithSchema &schema_key,
+                           std::vector<rocksdb::PinnableSlice> &results) {
+  if (!schema_key.context.isValidOp()) {
+    return accelerator::ACC_ERR;
+  }
+
+  for (auto &raw_record : raw_records) {
+    long col_value = accelerator::convertRecord(schema_key, raw_record.data_);
+    if (schema_key.context(col_value) == 1) {
+      results.emplace_back(std::move(rocksdb::PinnableSlice(
+          raw_record.data_, raw_record.size_)));
+    }
+  }
+  return accelerator::ACC_OK;
+}
+
+int recordIntFilter(std::vector<rocksdb::Slice> &raw_records,
                     const rocksdb::SlicewithSchema &schema_key,
                     std::vector<rocksdb::PinnableSlice> &results) {
+  // printf("[AVX][recordIntFilter] START raw_record_size: %lu\n", raw_records.size());
   uint64_t pivot = static_cast<uint64_t>(schema_key.context._pivot);
   int size = (int) raw_records.size();
-  // Round up size to next multiple of 8
-  int roundedSize = (size + 7) & ~7UL;
 
+  if (size < 8) {
+    return _recordNativeIntFilter(raw_records, schema_key, results);
+  }
+
+  // Round up size to lower multiple of 8
+  int rounded_size = size / 8;
+  int remain_size = size % 8;
+
+  // printf("[AVX][recordIntFilter] Break Point 1\n");
   __m256i pivots = _mm256_set_epi32(
       pivot, pivot, pivot, pivot, pivot, pivot, pivot, pivot);
   __m256i mask = _mm256_cmpeq_epi32(pivots, pivots);  // 0xffffffff mask
-  for (int i = 0; i < roundedSize; i += 8) {
+  // printf("[AVX][recordIntFilter] Break Point 2\n");
+  for (int i = 0; i < rounded_size; i += 8) {
+    // printf("[AVX][recordIntFilter] Break Point 3-1\n");
+    // printf("[AVX][recordIntFilter] Size: %lu, Raw Record: ", raw_records[i].size_);
     __m256i sources = _mm256_set_epi32(
         accelerator::convertRecord(schema_key, raw_records[i].data_),
         accelerator::convertRecord(schema_key, raw_records[i+1].data_),
@@ -91,6 +119,7 @@ int recordIntFilter(std::vector<rocksdb::PinnableSlice> &raw_records,
         accelerator::convertRecord(schema_key, raw_records[i+5].data_),
         accelerator::convertRecord(schema_key, raw_records[i+6].data_),
         accelerator::convertRecord(schema_key, raw_records[i+7].data_));
+    // printf("[AVX][recordIntFilter] Break Point 3-2\n");
     __m256i result;
     switch (schema_key.context._op) {
       case accelerator::EQ: {
@@ -122,20 +151,36 @@ int recordIntFilter(std::vector<rocksdb::PinnableSlice> &raw_records,
       default:
         return accelerator::ACC_ERR;
     }
+    // printf("[AVX][recordIntFilter] Break Point 3-3\n");
 
     unsigned result_mask = _mm256_movemask_epi8(result);
     unsigned compare_mask = 0xf0000000;
     int limit = (i + 7) < size ? 8 : size & 7;
+    // printf("[AVX][recordIntFilter] Break Point 3-4\n");
     for (int j = 0; j < limit; ++j) {
       if (result_mask & compare_mask) {
-        std::string *buf = new std::string(
-            raw_records[i + j].data_, raw_records[i + j].size_);
-        results.emplace_back(std::move(rocksdb::PinnableSlice(buf)));
+        results.emplace_back(
+            std::move(rocksdb::PinnableSlice(
+                raw_records[i + j].data_,
+                raw_records[i + j].size_)));
       }
       compare_mask = compare_mask >> 4;
     }
+    // printf("[AVX][recordIntFilter] Break Point 3-5\n");
   }
 
+  // Process remain records by native loop...
+  for (int i = 0; i < remain_size; ++i) {
+    int idx = rounded_size + i;
+    long col_value = accelerator::convertRecord(
+        schema_key, raw_records[idx].data_);
+    if (schema_key.context(col_value) == 1) {
+      results.emplace_back(std::move(rocksdb::PinnableSlice(
+          raw_records[idx].data_, raw_records[idx].size_)));
+    }
+  }
+
+  // printf("[AVX][recordIntFilter] END\n");
   return accelerator::ACC_OK;
 }
 

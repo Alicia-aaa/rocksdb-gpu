@@ -1377,14 +1377,6 @@ void Version::ValueFilter(const ReadOptions& read_options,
     f = fp.GetNextFile();
   }
 
-  // *status = table_cache_->ValueFilter(
-  //     read_options, *internal_comparator(), fdlist, ikey, schema,
-  //     &get_context, mutable_cf_options_.prefix_extractor.get(),
-  //     cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()),
-  //     IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
-  //                     fp.IsHitFileLastInLevel()),
-  //     fp.GetCurrentLevel());
-
   // Set ValueFilterMode to AVX
   ReadOptions vf_read_options = read_options;
   vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;

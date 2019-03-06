@@ -173,6 +173,10 @@ class Slice {
 class PinnableSlice : public Slice, public Cleanable {
  public:
   PinnableSlice() { buf_ = &self_space_; }
+  explicit PinnableSlice(const char* data, size_t size) {
+    buf_ = &self_space_;
+    PinSelf(Slice(data, size));
+  }
   explicit PinnableSlice(std::string* buf) { buf_ = buf; }
 
   // No copy constructor and copy assignment allowed.

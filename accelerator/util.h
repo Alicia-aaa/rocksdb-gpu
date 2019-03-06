@@ -14,6 +14,7 @@ namespace accelerator {
 
 long convertRecord(const rocksdb::SlicewithSchema &schema_key,
                    const char *record_ptr) {
+  // printf("[util.h][convertRecord] START\n");
   // Skip other columns...
   for (int i = 0; i < schema_key.getTarget(); ++i) {
     if (schema_key.getType(i) == 15) {
@@ -25,20 +26,10 @@ long convertRecord(const rocksdb::SlicewithSchema &schema_key,
       record_ptr += schema_key.getLength(i);
     }
   }
+  // printf("[util.h][convertRecord] After skip other columns\n");
 
-  uint len = 0;
-  if (schema_key.getType(schema_key.getTarget()) == 15) {
-    len = schema_key.getLength(schema_key.getTarget()) == 1
-        ? (unsigned char) record_ptr[0]
-        : (unsigned short)(*((unsigned short *)(record_ptr)));
-  } else {
-    len = schema_key.getLength(schema_key.getTarget());
-  }
-
-  unsigned char* str = new unsigned char[len];
-  memcpy(str, record_ptr, len * sizeof(unsigned char));
-  long result = (long)(*((int *)(str)));
-  delete str;
+  long result = (int)(*((int *)(record_ptr)));
+  // printf("[util.h][convertRecord] converted value: %ld\n", result);
   return result;
 }
 

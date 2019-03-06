@@ -801,18 +801,15 @@ static bool SaveValueOnAccFilter(void* arg, const char* entry) {
         }
         Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
         *(s->status) = Status::OK();
-        std::string* buf = new std::string("");
-        s->value = buf;
         if (*(s->merge_in_progress)) {
-          if (s->value != nullptr) {
-            *(s->status) = MergeHelper::TimedFullMerge(
-                merge_operator, s->key->user_key(), &v,
-                merge_context->GetOperands(), s->value, s->logger,
-                s->statistics, s->env_, nullptr /* result_operand */, true);
-          }
-        } else if (s->value != nullptr) {
-          s->value->assign(v.data(), v.size());
-          s->values->emplace_back(std::move(PinnableSlice(s->value)));
+          // TODO(totoro): Workarounds for using s->values...
+          s->value = new std::string("");
+          *(s->status) = MergeHelper::TimedFullMerge(
+              merge_operator, s->key->user_key(), &v,
+              merge_context->GetOperands(), s->value, s->logger,
+              s->statistics, s->env_, nullptr /* result_operand */, true);
+        } else if (s->values != nullptr) {
+          s->values->emplace_back(std::move(PinnableSlice(v.data(), v.size())));
         }
         if (s->inplace_update_support) {
           s->mem->GetLock(s->key->user_key())->ReadUnlock();

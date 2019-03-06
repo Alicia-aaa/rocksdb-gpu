@@ -46,6 +46,11 @@ struct FilterContext {
     return ss.str();
   }
 
+  bool isValidOp() const {
+    return _op == EQ || _op == LESS || _op == GREATER || _op == LESS_EQ
+        || _op == GREATER_EQ;
+  }
+
   int operator()(const long target) const {
     switch (_op) {
       case EQ:

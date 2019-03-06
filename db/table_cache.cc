@@ -9,6 +9,8 @@
 
 #include "db/table_cache.h"
 
+#include <iostream>
+
 #include "db/dbformat.h"
 #include "db/range_tombstone_fragmenter.h"
 #include "db/version_edit.h"
@@ -506,8 +508,8 @@ Status _ValueFilterAVX(const ReadOptions& options,
 
 Status TableCache::ValueFilter(const ReadOptions& options,
                                const InternalKeyComparator& internal_comparator,
-                               const Slice& /*k*/, const SlicewithSchema& /*schema_k*/,
-                               GetContext* /*get_context*/,
+                               const Slice& k, const SlicewithSchema& schema_k,
+                               GetContext* get_context,
                                const SliceTransform* prefix_extractor,
                                std::vector<FdWithKeyRange *> fds,
                                std::vector<HistogramImpl *> fd_read_hists,
@@ -546,7 +548,10 @@ Status TableCache::ValueFilter(const ReadOptions& options,
 
   switch (options.value_filter_mode) {
     case accelerator::ValueFilterMode::AVX:
-      // s = _ValueFilterAVX(options, k, schema_k, get_context, readers);
+      std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
+      s = _ValueFilterAVX(
+          options, k, schema_k, get_context, readers, reader_skip_filters,
+          prefix_extractor);
       break;
     case accelerator::ValueFilterMode::GPU:
       // s = _ValueFilterGPU(options, k, schema_k, get_context, readers);

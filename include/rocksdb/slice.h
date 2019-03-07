@@ -173,9 +173,9 @@ class Slice {
 class PinnableSlice : public Slice, public Cleanable {
  public:
   PinnableSlice() { buf_ = &self_space_; }
-  explicit PinnableSlice(const char* data, size_t size) {
+  explicit PinnableSlice(const char* data_p, size_t size_p) {
     buf_ = &self_space_;
-    PinSelf(Slice(data, size));
+    PinSelf(Slice(data_p, size_p));
   }
   explicit PinnableSlice(std::string* buf) { buf_ = buf; }
 

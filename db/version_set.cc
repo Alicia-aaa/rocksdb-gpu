@@ -22,6 +22,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
 
 #include "accelerator/common.h"
 #include "db/compaction.h"
@@ -220,6 +221,78 @@ class FilePicker {
         }
         prev_file_ = f;
 #endif
+        returned_file_level_ = curr_level_;
+        if (curr_level_ > 0 && cmp_largest < 0) {
+          // No more files to search in this level.
+          search_ended_ = !PrepareNextLevel();
+        } else {
+          ++curr_index_in_curr_level_;
+        }
+        return f;
+      }
+      // Start searching next level.
+      search_ended_ = !PrepareNextLevel();
+    }
+    // Search ended.
+    return nullptr;
+  }
+
+  FdWithKeyRange* GetNextFileWithTable() {
+    while (!search_ended_) {  // Loops over different levels.
+      while (curr_index_in_curr_level_ < curr_file_level_->num_files) {
+        // Loops over all files in current level.
+        FdWithKeyRange* f = &curr_file_level_->files[curr_index_in_curr_level_];
+        hit_file_level_ = curr_level_;
+        is_hit_file_last_in_level_ =
+            curr_index_in_curr_level_ == curr_file_level_->num_files - 1;
+        int cmp_largest = -1;
+
+        // Do key range filtering of files or/and fractional cascading if:
+        // (1) not all the files are in level 0, or
+        // (2) there are more than 3 current level files
+        // If there are only 3 or less current level files in the system, we skip
+        // the key range filtering. In this case, more likely, the system is
+        // highly tuned to minimize number of tables queried by each query,
+        // so it is unlikely that key range filtering is more efficient than
+        // querying the files.
+        if (num_levels_ > 1 || curr_file_level_->num_files > 3) {
+          // Check if key is within a file's range. If search left bound and
+          // right bound point to the same find, we are sure key falls in
+          // range.
+          assert(
+              curr_level_ == 0 ||
+              curr_index_in_curr_level_ == start_index_in_curr_level_ ||
+              user_comparator_->Compare(user_key_,
+                ExtractUserKey(f->smallest_key)) <= 0);
+
+          int cmp_smallest = user_comparator_->Compare(user_key_,
+              Slice(f->smallest_key.data_, 4));
+          if (cmp_smallest >= 0) {
+            cmp_largest = user_comparator_->Compare(user_key_,
+                Slice(f->largest_key.data_, 4));
+          }
+
+          // Setup file search bound for the next level based on the
+          // comparison results
+          if (curr_level_ > 0) {
+            file_indexer_->GetNextLevelIndex(curr_level_,
+                                            curr_index_in_curr_level_,
+                                            cmp_smallest, cmp_largest,
+                                            &search_left_bound_,
+                                            &search_right_bound_);
+          }
+          // Key falls out of current file's range
+          if (cmp_smallest < 0 || cmp_largest > 0) {
+            if (curr_level_ == 0) {
+              ++curr_index_in_curr_level_;
+              continue;
+            } else {
+              // Search next level.
+              break;
+            }
+          }
+        }
+
         returned_file_level_ = curr_level_;
         if (curr_level_ > 0 && cmp_largest < 0) {
           // No more files to search in this level.
@@ -1343,12 +1416,50 @@ void Version::ValueFilter(const ReadOptions& read_options,
       storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
       storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
       user_comparator(), internal_comparator());
-  FdWithKeyRange* f = fp.GetNextFile();
 
+  FdWithKeyRange* f = fp.GetNextFileWithTable();
+
+  std::vector<FdWithKeyRange *> fds;
   std::vector<HistogramImpl *> fd_read_hists;
   std::vector<bool> fd_skip_filters;
-  std::vector<FdWithKeyRange *> fds;
   std::vector<int> fd_levels;
+
+
+  /* Implementation of entire traversal to search MetaData
+   *
+   */
+
+//  for (int i = 0; i < storage_info_.num_non_empty_levels_; i++) {
+//    for (size_t j = 0; j < storage_info_.level_files_brief_[i].num_files; j++) {
+//      std::cout << " level [" << i << "] num_files " <<  storage_info_.level_files_brief_[i].num_files <<std::endl;
+//      int compare_smallest = user_comparator()->Compare(user_key,
+//              Slice(storage_info_.level_files_brief_[i].files[j].smallest_key.data_, 4));
+//      if (compare_smallest == 0 ) std::cout << " same " << std::endl;
+//      if (compare_smallest > 0 ) std::cout << " user is big " << std::endl;
+//      if (compare_smallest < 0 ) std::cout << " user is small " << std::endl;
+//      std::cout << "Smallest Userkey in level " << i << " file " <<
+//              j << ExtractUserKey(storage_info_.level_files_brief_[i].files[j].smallest_key).ToString(1) << std::endl;
+//
+//      if (compare_smallest >= 0) {
+//        std::cout <<"print" <<std::endl;
+//        int compare_largest = user_comparator()->Compare(user_key,
+//                Slice(storage_info_.level_files_brief_[i].files[j].largest_key.data_,4));
+//        std::cout << "Largest Userkey in level " << i << " file " <<
+//                j << ExtractUserKey(storage_info_.level_files_brief_[i].files[j].largest_key).ToString(1) << std::endl;
+//        if (compare_largest <= 0) {
+//          std::cout <<"print22" <<std::endl;
+//          fds.push_back(&storage_info_.level_files_brief_[i].files[j]);
+//          fd_read_hists.push_back(
+//              cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
+//          fd_skip_filters.push_back(
+//              IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+//                              fp.IsHitFileLastInLevel()));
+//          fd_levels.push_back(fp.GetCurrentLevel());
+//        }
+//      }
+//    }
+//  }
+
 
   while (f != nullptr) {
     if (*max_covering_tombstone_seq > 0) {
@@ -1374,7 +1485,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
                         fp.IsHitFileLastInLevel()));
     fd_levels.push_back(fp.GetCurrentLevel());
     fds.push_back(f);
-    f = fp.GetNextFile();
+    f = fp.GetNextFileWithTable();
   }
 
   // Set ValueFilterMode to AVX

@@ -502,7 +502,11 @@ Status _ValueFilterAVX(const ReadOptions& options,
 //                        GetContext* get_context,
 //                        std::vector<TableReader *> readers) {
 //   Status s;
-//   // TODO(totoro): Implements GPU value filtering...
+//   std::vector<char> datablocks;
+//   std::vector<uint64_t> seek_indices;
+//   for (auto reader : readers) {
+//     reader->GetDataBlocks(options, datablocks, seek_indices);
+//   }
 //   return s;
 // }
 

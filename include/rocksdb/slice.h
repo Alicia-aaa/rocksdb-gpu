@@ -173,9 +173,15 @@ class Slice {
 class PinnableSlice : public Slice, public Cleanable {
  public:
   PinnableSlice() { buf_ = &self_space_; }
+<<<<<<< HEAD
   explicit PinnableSlice(const char* data_p, size_t size_p) {
     buf_ = &self_space_;
     PinSelf(Slice(data_p, size_p));
+=======
+  explicit PinnableSlice(const char* data__, size_t size__) {
+    buf_ = &self_space_;
+    PinSelf(data__, size__);
+>>>>>>> [TRIVIAL] Fixes rocksdb make problem.
   }
   explicit PinnableSlice(std::string* buf) { buf_ = buf; }
 
@@ -215,6 +221,14 @@ class PinnableSlice : public Slice, public Cleanable {
     size_ = s.size();
     cleanable->DelegateCleanupsTo(this);
     assert(pinned_);
+  }
+
+  inline void PinSelf(const char *data__, size_t size__) {
+    assert(!pinned_);
+    buf_->assign(data__, size__);
+    data_ = buf_->data();
+    size_ = buf_->size();
+    assert(!pinned_);
   }
 
   inline void PinSelf(const Slice& slice) {

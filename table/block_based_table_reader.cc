@@ -2410,6 +2410,13 @@ InternalIterator* BlockBasedTable::NewIterator(
 Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
                                       std::vector<char>& data,
                                       std::vector<uint64_t>& seek_indices) {
+  return GetDataBlocks(read_options, data, seek_indices, 0);
+}
+
+Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
+                                      std::vector<char>& data,
+                                      std::vector<uint64_t>& seek_indices,
+                                      uint64_t seek_index_start_offset) {
   Status s;
 
   IndexBlockIter iiter_on_stack;
@@ -2422,7 +2429,7 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
     iiter_unique_ptr.reset(iiter);
   }
 
-  uint64_t accumulated_data_index = 0;
+  uint64_t accumulated_data_index = seek_index_start_offset;
   for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
     BlockHandle handle = iiter->value();
     Slice compression_dict;

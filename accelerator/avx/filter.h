@@ -19,7 +19,7 @@ namespace avx {
 int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
                     std::vector<long> &results);
 
-int recordIntFilter(std::vector<rocksdb::Slice> &raw_records,
+int recordFilter(std::vector<rocksdb::Slice> &raw_records,
                     const rocksdb::SlicewithSchema &schema_key,
                     std::vector<rocksdb::PinnableSlice> &results);
 

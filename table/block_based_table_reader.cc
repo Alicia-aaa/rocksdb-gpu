@@ -2786,9 +2786,9 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
         }
 
         records.emplace_back(biter.value().data_, biter.value().size_);
-        std::cout << "[BlockBasedTable::AvxFilter] Data: "
-            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
-            << std::endl;
+//        std::cout << "[BlockBasedTable::AvxFilter] Data: "
+//            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
+//            << std::endl;
       }
       s = biter.status();
 
@@ -2800,7 +2800,7 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
 
     if (schema_key.getTarget() != -1) {
       std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-      avx::recordIntFilter(
+      avx::recordFilter(
           records, schema_key, *get_context->val_ptr());
     } else {
       std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
@@ -2810,8 +2810,9 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
       }
     }
     for (auto &result : *get_context->val_ptr()) {
-      long col_value = accelerator::convertRecord(schema_key, result.data_);
-      std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
+      //long col_value = accelerator::convertRecord(schema_key, result.data_);
+      accelerator::convertRecord(schema_key, result.data_);
+      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
     }
 
     if (s.ok()) {

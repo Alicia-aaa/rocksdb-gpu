@@ -326,8 +326,8 @@ bool GetContext::SaveValue(const ParsedInternalKey& parsed_key,
 /* GPU Accelerator */
 bool GetContext::checkTableRange(const ParsedInternalKey& parsed_key) {
 
-  std::cout << "parsed_key " << Slice(parsed_key.user_key.data_, 4).ToString(1)
-		  << " and user_key " << user_key_.ToString(1) << std::endl;
+//  std::cout << "parsed_key " << Slice(parsed_key.user_key.data_, 4).ToString(1)
+//		  << " and user_key " << user_key_.ToString(1) << std::endl;
   if (ucmp_->Equal(Slice(parsed_key.user_key.data_,4), user_key_)) {
 	  return true;
   }

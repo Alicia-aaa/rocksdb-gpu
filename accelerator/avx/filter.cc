@@ -70,7 +70,7 @@ int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
   return accelerator::ACC_OK;
 }
 
-int _recordNativeIntFilter(std::vector<rocksdb::Slice> &raw_records,
+int _recordNativeFilter(std::vector<rocksdb::Slice> &raw_records,
                            const rocksdb::SlicewithSchema &schema_key,
                            std::vector<rocksdb::PinnableSlice> &results) {
   if (!schema_key.context.isValidOp()) {
@@ -87,7 +87,7 @@ int _recordNativeIntFilter(std::vector<rocksdb::Slice> &raw_records,
   return accelerator::ACC_OK;
 }
 
-int recordIntFilter(std::vector<rocksdb::Slice> &raw_records,
+int recordFilter(std::vector<rocksdb::Slice> &raw_records,
                     const rocksdb::SlicewithSchema &schema_key,
                     std::vector<rocksdb::PinnableSlice> &results) {
   // printf("[AVX][recordIntFilter] START raw_record_size: %lu\n", raw_records.size());
@@ -95,7 +95,7 @@ int recordIntFilter(std::vector<rocksdb::Slice> &raw_records,
   int size = (int) raw_records.size();
 
   if (size < 8) {
-    return _recordNativeIntFilter(raw_records, schema_key, results);
+    return _recordNativeFilter(raw_records, schema_key, results);
   }
 
   // Round up size to lower multiple of 8

@@ -274,12 +274,13 @@ class PinnableSlice : public Slice, public Cleanable {
 class SlicewithSchema : public Slice, public Cleanable {
  public:
   SlicewithSchema(const char* d, size_t n, accelerator::FilterContext ctx,
-		  int idx, unsigned int * type, unsigned int * length)
+		  int idx, unsigned int * type, unsigned int * length, unsigned int * skip)
  : Slice(d, n) {
 	  context = ctx;
 	  target_idx = idx;
 	  field_type = type;
 	  field_length = length;
+	  field_skip = skip;
   }
 
   // No copy constructor and copy assignment allowed.
@@ -292,6 +293,10 @@ class SlicewithSchema : public Slice, public Cleanable {
 
   unsigned int getLength (unsigned int index) const  {
 	  return field_length[index];
+  }
+
+  unsigned int getSkip (unsigned int index) const  {
+      return field_skip[index];
   }
 
   int getTarget() const {
@@ -312,6 +317,7 @@ class SlicewithSchema : public Slice, public Cleanable {
   int target_idx;
   unsigned int * field_type;
   unsigned int * field_length;
+  unsigned int * field_skip;
 };
 
 // A set of Slices that are virtually concatenated together.  'parts' points

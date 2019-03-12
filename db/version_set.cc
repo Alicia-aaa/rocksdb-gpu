@@ -1488,7 +1488,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
     f = fp.GetNextFileWithTable();
   }
 
-  // Set ValueFilterMode to AVX
+  // Set ValueFilterMode
   ReadOptions vf_read_options = read_options;
   vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;
 

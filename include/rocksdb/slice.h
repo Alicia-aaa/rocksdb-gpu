@@ -23,7 +23,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <string>
-
+#include <vector>
 
 #ifdef __cpp_lib_string_view
 #include <string_view>
@@ -274,18 +274,40 @@ class PinnableSlice : public Slice, public Cleanable {
 class SlicewithSchema : public Slice, public Cleanable {
  public:
   SlicewithSchema(const char* d, size_t n, accelerator::FilterContext ctx,
-		  int idx, unsigned int * type, unsigned int * length, unsigned int * skip)
+		  int idx, const std::vector<uint>& type, const std::vector<uint>& length,
+      const std::vector<uint>& skip)
  : Slice(d, n) {
 	  context = ctx;
 	  target_idx = idx;
-	  field_type = type;
-	  field_length = length;
-	  field_skip = skip;
+    std::copy(type.begin(), type.end(), std::back_inserter(field_type));
+    std::copy(length.begin(), length.end(), std::back_inserter(field_length));
+    std::copy(skip.begin(), skip.end(), std::back_inserter(field_skip));
+  }
+
+  SlicewithSchema&& clone() const {
+    return std::move(SlicewithSchema(
+        data_, size_, context, target_idx, field_type, field_length, field_skip));
   }
 
   // No copy constructor and copy assignment allowed.
   SlicewithSchema(SlicewithSchema&) = delete;
   SlicewithSchema& operator=(SlicewithSchema&) = delete;
+
+  // Move constructor allowed.
+  SlicewithSchema(SlicewithSchema&& other) {
+    *this = std::move(other);
+  }
+  SlicewithSchema& operator=(SlicewithSchema&& other) {
+	  if (this != &other) {
+      data_ = other.data_;
+      size_ = other.size_;
+      target_idx = other.target_idx;
+      context = other.context;
+      field_type = std::move(other.field_type);
+      field_length = std::move(other.field_length);
+	  }
+	  return *this;
+  }
 
   unsigned int getType (unsigned int index) const  {
 	  return field_type[index];
@@ -313,11 +335,11 @@ class SlicewithSchema : public Slice, public Cleanable {
 
   accelerator::FilterContext context;
 
- private:
+ //private:
   int target_idx;
-  unsigned int * field_type;
-  unsigned int * field_length;
-  unsigned int * field_skip;
+  std::vector<uint> field_type;
+  std::vector<uint> field_length;
+  std::vector<uint> field_skip;
 };
 
 // A set of Slices that are virtually concatenated together.  'parts' points

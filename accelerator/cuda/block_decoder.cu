@@ -1,6 +1,7 @@
 #include <cooperative_groups.h>
 
 #include "accelerator/cuda/block_decoder.h"
+#include "accelerator/cuda/cuda_util.h"
 
 namespace ruda {
 
@@ -182,6 +183,72 @@ void DecodeNFilterSubDataBlocks(// Parameters
     // memcpy(results_value, value, value_size);
     // results_keys[idx] = RudaSlice(results_key, key_size);
     // results_values[idx] = RudaSlice(results_value, value_size);
+
+    // Next DataKey...
+    subblock = value + value_size;
+  }
+}
+
+__device__
+void DecodeNFilterOnSchema(// Parameters
+                           const char *cached_data,
+                           const uint64_t cached_data_size,
+                           const uint64_t block_offset,
+                           const uint64_t start_idx,
+                           const uint64_t end_idx,
+                           RudaSchema *schema,
+                           // Results
+                           unsigned long long int *results_idx,
+                           ruda::RudaKVIndexPair *results) {
+  const char *subblock = &cached_data[start_idx];
+  const char *limit = &cached_data[end_idx];
+  while (subblock < limit) {
+    uint32_t shared, non_shared, value_size;
+    subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
+                             &value_size);
+    const char *key;
+    size_t key_size;
+    if (shared == 0) {
+      key = subblock;
+      key_size = non_shared;
+    } else {
+      // TODO(totoro): We need to consider 'shared' data within subblock.
+      key = subblock;
+      key_size = shared + non_shared;
+    }
+
+    const char *value = subblock + non_shared;
+    long decoded_value = rudaConvertRecord(schema, value);
+    bool filter_result = false;
+    switch (schema->ctx._op) {
+      case accelerator::EQ:
+        filter_result = decoded_value == schema->ctx._pivot;
+        break;
+      case accelerator::LESS:
+        filter_result = decoded_value < schema->ctx._pivot;
+        break;
+      case accelerator::GREATER:
+        filter_result = decoded_value > schema->ctx._pivot;
+        break;
+      case accelerator::LESS_EQ:
+        filter_result = decoded_value <= schema->ctx._pivot;
+        break;
+      case accelerator::GREATER_EQ:
+        filter_result = decoded_value >= schema->ctx._pivot;
+        break;
+      default:
+        break;
+    }
+    if (filter_result) {
+      unsigned long long int idx = atomicAdd(results_idx, 1);
+      size_t key_start = key - cached_data;
+      size_t value_start = value - cached_data;
+      results[idx] = RudaKVIndexPair(
+          block_offset + key_start,
+          block_offset + key_start + key_size,
+          block_offset + value_start,
+          block_offset + value_start + value_size);
+    }
 
     // Next DataKey...
     subblock = value + value_size;

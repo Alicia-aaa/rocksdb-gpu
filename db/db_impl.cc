@@ -1428,7 +1428,7 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
   }
 
   PERF_TIMER_GUARD(get_from_output_files_time);
-  sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
+  sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
                            &merge_context, &max_covering_tombstone_seq,
                            value_found, nullptr, nullptr, callback,
                            is_blob_index);

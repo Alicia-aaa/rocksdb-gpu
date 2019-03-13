@@ -488,12 +488,28 @@ Status _ValueFilterAVX(const ReadOptions& options,
                        std::vector<bool> reader_skip_filters,
                        const SliceTransform *prefix_extractor) {
   Status s;
-  for (size_t i = 0; i < readers.size(); ++i) {
+  size_t i = 0;
+  for (i = 0; i < readers.size(); ++i) {
     TableReader *reader = readers[i];
     bool skip_filters = reader_skip_filters[i];
-    reader->AvxFilter(
+    s = reader->AvxFilter(
         options, k, schema_k, get_context, prefix_extractor, skip_filters);
   }
+
+  return s;
+}
+
+Status _ValueFilterAVXBlock(const ReadOptions& options,
+                       const Slice& k, const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       TableReader * reader,
+                       bool reader_skip_filter,
+                       const SliceTransform *prefix_extractor) {
+  Status s;
+
+  s = reader->AvxFilterBlock(
+        options, k, schema_k, get_context, prefix_extractor, reader_skip_filter);
+
   return s;
 }
 
@@ -568,6 +584,66 @@ Status TableCache::ValueFilter(const ReadOptions& options,
   for (auto handle : handles) {
     ReleaseHandle(handle);
   }
+  return s;
+}
+
+Status TableCache::ValueFilterBlock(const ReadOptions& options,
+                               const InternalKeyComparator& internal_comparator,
+                               const Slice& k, const SlicewithSchema& schema_k,
+                               GetContext* get_context,
+                               const SliceTransform* prefix_extractor,
+                               std::vector<FdWithKeyRange *>* fds,
+                               std::vector<HistogramImpl *>* fd_read_hists,
+                               std::vector<bool>* fd_skip_filters,
+                               std::vector<int>* fd_levels) {
+  Status s;
+  size_t fd_count = fds.size();
+
+  auto &fd = fds->back()->file_metadata->fd;
+  HistogramImpl *fd_read_hist = fd_read_hists->back();
+  bool fd_skip_filter = fd_skip_filters->back();
+  int fd_level = fd_levels->back();
+
+  TableReader* t = fd.table_reader;
+  
+  if (t == nullptr) {
+    Cache::Handle *handle = nullptr;
+    s = FindTable(
+        env_options_, internal_comparator, fd, &handle, prefix_extractor,
+        options.read_tier == kBlockCacheTier /* no_io */,
+        true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
+    if (s.ok()) {
+      t = GetTableReaderFromHandle(handle);
+    }
+  }
+
+  switch (options.value_filter_mode) {
+    case accelerator::ValueFilterMode::AVX:
+      std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
+      s = _ValueFilterAVXBlock(
+          options, k, schema_k, get_context, t, fd_skip_filter,
+          prefix_extractor);
+      break;
+    case accelerator::ValueFilterMode::GPU:
+      // s = _ValueFilterGPU(options, k, schema_k, get_context, readers);
+      break;
+    case accelerator::ValueFilterMode::NORMAL:
+    default:
+      break;
+  }
+
+  if(s.IsTableEnd()) {
+      fds->pop_back();
+      fd_read_hists->pop_back();
+      fd_skip_filters->pop_back();
+      fd_levels->pop_back();
+      get_context->key_ptr() = nullptr;
+
+      if(fds->size() != 0) {
+        s = Status();
+      }
+  }
+
   return s;
 }
 

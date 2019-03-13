@@ -58,7 +58,8 @@ class Status {
     kBusy = 11,
     kExpired = 12,
     kTryAgain = 13,
-    kCompactionTooLarge = 14
+    kCompactionTooLarge = 14,
+    kTableEnd
   };
 
   Code code() const { return code_; }
@@ -198,6 +199,8 @@ class Status {
     return Status(kIOError, kSpaceLimit, msg, msg2);
   }
 
+  static Status TableEnd(SubCode msg = kNone) { return Status(kTableEnd, msg); }
+
   // Returns true iff the status indicates success.
   bool ok() const { return code() == kOk; }
 
@@ -265,6 +268,8 @@ class Status {
   bool IsMemoryLimit() const {
     return (code() == kAborted) && (subcode() == kMemoryLimit);
   }
+
+  bool IsTableEnd() const { return code() == kTableEnd; }
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.

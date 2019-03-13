@@ -64,7 +64,8 @@ GetContext::GetContext(const Comparator* ucmp,
       replay_log_(nullptr),
       pinned_iters_mgr_(_pinned_iters_mgr),
       callback_(callback),
-      is_blob_index_(is_blob_index) {
+      is_blob_index_(is_blob_index),
+      key_to_find(nullptr) {
   if (seq_) {
     *seq_ = kMaxSequenceNumber;
   }
@@ -79,7 +80,7 @@ GetContext::GetContext(const Comparator* ucmp,
                        SequenceNumber* _max_covering_tombstone_seq, Env* env,
                        SequenceNumber* seq,
                        PinnedIteratorsManager* _pinned_iters_mgr,
-                       ReadCallback* callback, bool* is_blob_index)
+                       ReadCallback* callback, bool* is_blob_index, Slice* key_to_find_)
     : ucmp_(ucmp),
       merge_operator_(merge_operator),
       logger_(logger),
@@ -96,7 +97,8 @@ GetContext::GetContext(const Comparator* ucmp,
       replay_log_(nullptr),
       pinned_iters_mgr_(_pinned_iters_mgr),
       callback_(callback),
-      is_blob_index_(is_blob_index) {
+      is_blob_index_(is_blob_index),
+      key_to_find(key_to_find_) {
   if (seq_) {
     *seq_ = kMaxSequenceNumber;
   }

@@ -1188,6 +1188,10 @@ VersionStorageInfo::VersionStorageInfo(
       file_indexer_(user_comparator),
       compaction_style_(compaction_style),
       files_(new std::vector<FileMetaData*>[num_levels_]),
+      table_related_files_(new std::vector<FileMetaData*>[num_levels_]),
+      fd_read_hists(new std::vector<FileMetaData*>[num_levels_]),
+      fd_skip_filters(new std::vector<FileMetaData*>[num_levels_]),
+      fd_levels(new std::vector<FileMetaData*>[num_levels_]),
       base_level_(num_levels_ == 1 ? -1 : 1),
       level_multiplier_(0.0),
       files_by_compaction_pri_(num_levels_),
@@ -1249,7 +1253,7 @@ Version::Version(ColumnFamilyData* column_family_data, VersionSet* vset,
       refs_(0),
       env_options_(env_opt),
       mutable_cf_options_(mutable_cf_options),
-      version_number_(version_number) {}
+      version_number_(version_number), key_to_find(nullptr){}
 
 void Version::Get(const ReadOptions& read_options, const LookupKey& k,
                   PinnableSlice* value, Status* status,
@@ -1417,15 +1421,12 @@ void Version::ValueFilter(const ReadOptions& read_options,
       storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
       user_comparator(), internal_comparator());
 
-  FdWithKeyRange* f = fp.GetNextFileWithTable();
-
-  std::vector<FdWithKeyRange *> fds;
-  std::vector<HistogramImpl *> fd_read_hists;
-  std::vector<bool> fd_skip_filters;
-  std::vector<int> fd_levels;
-
-
-  /* Implementation of entire traversal to search MetaData
+    std::vector<FdWithKeyRange *> table_related_files_;
+    std::vector<HistogramImpl *> fd_read_hists;
+    std::vector<bool> fd_skip_filters;
+    std::vector<int> fd_levels;
+ 
+   /* Implementation of entire traversal to search MetaData
    *
    */
 
@@ -1460,33 +1461,32 @@ void Version::ValueFilter(const ReadOptions& read_options,
 //    }
 //  }
 
+    while (f != nullptr) {
+      if (*max_covering_tombstone_seq > 0) {
+        // The remaining files we look at will only contain covered keys, so we
+        // stop here.
+        break;
+      }
 
-  while (f != nullptr) {
-    if (*max_covering_tombstone_seq > 0) {
-      // The remaining files we look at will only contain covered keys, so we
-      // stop here.
-      break;
+      bool timer_enabled =
+          GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
+          get_perf_context()->per_level_perf_context_enabled;
+      StopWatchNano timer(env_, timer_enabled /* auto_start */);
+      // TODO: examine the behavior for corrupted key
+      if (timer_enabled) {
+        PERF_COUNTER_BY_LEVEL_ADD(get_from_table_nanos, timer.ElapsedNanos(),
+                                  fp.GetCurrentLevel());
+      }
+
+      fd_read_hists->push_back(
+          cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
+      fd_skip_filters->push_back(
+          IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+                          fp.IsHitFileLastInLevel()));
+      fd_levels->push_back(fp.GetCurrentLevel());
+      table_related_files_->push_back(f);
+      f = fp.GetNextFileWithTable();   
     }
-
-    bool timer_enabled =
-        GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
-        get_perf_context()->per_level_perf_context_enabled;
-    StopWatchNano timer(env_, timer_enabled /* auto_start */);
-    // TODO: examine the behavior for corrupted key
-    if (timer_enabled) {
-      PERF_COUNTER_BY_LEVEL_ADD(get_from_table_nanos, timer.ElapsedNanos(),
-                                fp.GetCurrentLevel());
-    }
-
-    fd_read_hists.push_back(
-        cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
-    fd_skip_filters.push_back(
-        IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
-                        fp.IsHitFileLastInLevel()));
-    fd_levels.push_back(fp.GetCurrentLevel());
-    fds.push_back(f);
-    f = fp.GetNextFileWithTable();
-  }
 
   // Set ValueFilterMode to AVX
   ReadOptions vf_read_options = read_options;
@@ -1495,8 +1495,89 @@ void Version::ValueFilter(const ReadOptions& read_options,
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilter(
       vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
-      mutable_cf_options_.prefix_extractor.get(), fds, fd_read_hists,
+      mutable_cf_options_.prefix_extractor.get(), table_related_files_, fd_read_hists,
       fd_skip_filters, fd_levels);
+
+  if (key_exists != nullptr)
+      *key_exists = false;
+}
+
+void Version::ValueFilterBlock(const ReadOptions& read_options,
+                          const LookupKey& k, const SlicewithSchema& schema_k,
+                          std::vector<PinnableSlice> &value, Status* status,
+                          MergeContext* merge_context,
+                          SequenceNumber* max_covering_tombstone_seq,
+                          bool* value_found, bool* key_exists,
+                          SequenceNumber* seq, ReadCallback* callback,
+                          bool* is_blob) {
+  Slice ikey = k.internal_key();
+  Slice user_key = k.user_key();
+
+  assert(status->ok() || status->IsMergeInProgress());
+
+  if (key_exists != nullptr) {
+    // will falsify below if not found
+    *key_exists = true;
+  }
+
+  PinnedIteratorsManager pinned_iters_mgr;
+  if(key_to_find == nullptr) *key_to_find = ikey;
+  GetContext get_context(
+      user_comparator(), merge_operator_, info_log_, db_statistics_,
+      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
+      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
+      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob, key_to_find);
+
+  // Pin blocks that we read to hold merge operands
+  if (merge_operator_) {
+    pinned_iters_mgr.StartPinning();
+  }
+
+  FilePicker fp(
+      storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
+      storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
+      user_comparator(), internal_comparator());
+
+  FdWithKeyRange* f = fp.GetNextFileWithTable();
+
+  if(storage_info_.table_related_files_->empty()) {
+    while (f != nullptr) {
+      if (*max_covering_tombstone_seq > 0) {
+        // The remaining files we look at will only contain covered keys, so we
+        // stop here.
+        break;
+      }
+
+      bool timer_enabled =
+          GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
+          get_perf_context()->per_level_perf_context_enabled;
+      StopWatchNano timer(env_, timer_enabled /* auto_start */);
+      // TODO: examine the behavior for corrupted key
+      if (timer_enabled) {
+        PERF_COUNTER_BY_LEVEL_ADD(get_from_table_nanos, timer.ElapsedNanos(),
+                                  fp.GetCurrentLevel());
+      }
+
+      storage_info_.fd_read_hists->push_back(
+          cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
+      storage_info_.fd_skip_filters->push_back(
+          IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
+                          fp.IsHitFileLastInLevel()));
+      storage_info_.fd_levels->push_back(fp.GetCurrentLevel());
+      storage_info_.table_related_files_->push_back(f);
+      f = fp.GetNextFileWithTable();
+     }
+  }
+
+  // Set ValueFilterMode to AVX
+  ReadOptions vf_read_options = read_options;
+  vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;
+
+  *status = Status::NotFound(); // Use an empty error message for speed
+  *status = table_cache_->ValueFilterBlock(
+      vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
+      mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_, storage_info_.fd_read_hists,
+      storage_info_.fd_skip_filters, storage_info_.fd_levels);
 
   if (key_exists != nullptr)
       *key_exists = false;

@@ -116,6 +116,15 @@ class TableReader {
     return Status();
   }
 
+  virtual Status AvxFilterBlock(const ReadOptions& /* readOptions */,
+                           const Slice& /* key */,
+                           const SlicewithSchema& /* schema_key */,
+                           GetContext* /* get_context */,
+                           const SliceTransform* /* prefix_extractor */,
+                           bool /* skip_filters*/) {
+    return Status();
+  }
+
   // Prefetch data corresponding to a give range of keys
   // Typically this functionality is required for table implementations that
   // persists the data on a non volatile storage medium like disk/SSD

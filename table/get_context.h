@@ -65,7 +65,7 @@ class GetContext {
              SequenceNumber* max_covering_tombstone_seq, Env* env,
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
-             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
+             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr, Slice *key_to_find);
 
   void MarkKeyMayExist();
 
@@ -112,8 +112,13 @@ class GetContext {
   }
 
   void ReportCounters();
+
   std::vector<PinnableSlice> *val_ptr() {
 	  return values;
+  }
+
+  Slice *key_ptr() {
+      return key_to_find;
   }
 
  private:
@@ -140,6 +145,7 @@ class GetContext {
   ReadCallback* callback_;
   bool sample_;
   bool* is_blob_index_;
+  Slice * key_to_find;
 };
 
 void replayGetContextLog(const Slice& replay_log, const Slice& user_key,

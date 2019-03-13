@@ -575,6 +575,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       const rocksdb::SlicewithSchema &schema,
                       const size_t max_results_count,
                       std::vector<rocksdb::PinnableSlice> &values) {
+  std::cout << "[RUDA][recordBlockFilter] START" << std::endl;
   // Warming up
   // Note(totoro): Because, there is a warming up latency on gpu when
   // gpu-related function called(ex. set up gpu driver). So, we ignore this
@@ -583,31 +584,31 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
   cudaCheckError(cudaMalloc(&warming_up, 0));
   cudaCheckError(cudaFree(warming_up));
 
-  // Cuda can't use const variable. So we copy SlicewithSchema. (Shallow copy)
-  rocksdb::SlicewithSchema copied_schema = schema.clone();
+  // // Cuda can't use const variable. So we copy SlicewithSchema. (Shallow copy)
+  // rocksdb::SlicewithSchema copied_schema = schema.clone();
 
-  RudaRecordBlockManager block_mgr(
-      seek_indices.size() /* kSize */,
-      64 /* kBlockSize */,
-      4 /* kStreamCount */,
-      max_results_count);
+  // RudaRecordBlockManager block_mgr(
+  //     seek_indices.size() /* kSize */,
+  //     64 /* kBlockSize */,
+  //     4 /* kStreamCount */,
+  //     max_results_count);
 
-  // Copy & Initializes variables from host to device.
-  block_mgr.initParams(datablocks, seek_indices);
-  // block_stream_mgr.log();
+  // // Copy & Initializes variables from host to device.
+  // block_mgr.initParams(datablocks, seek_indices);
+  // // block_stream_mgr.log();
 
-  block_mgr.registerPinnedMemory(datablocks, seek_indices, copied_schema);
-  // ----------------------------------------------
-  // Cuda Stream Pipelined (Accelerate)
-  block_mgr.populateToCuda(datablocks, seek_indices, copied_schema);
-  std::cout << "Total GPU used memory: "
-      << (block_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
-  block_mgr.executeKernels(datablocks.size());
-  block_mgr.copyFromCuda();
-  // ----------------------------------------------
-  block_mgr.translatePairsToSlices(datablocks, values);
-  block_mgr.unregisterPinnedMemory(datablocks, seek_indices, copied_schema);
-  block_mgr.clear();
+  // block_mgr.registerPinnedMemory(datablocks, seek_indices, copied_schema);
+  // // ----------------------------------------------
+  // // Cuda Stream Pipelined (Accelerate)
+  // block_mgr.populateToCuda(datablocks, seek_indices, copied_schema);
+  // std::cout << "[RUDA][recordBlockFilter] Total GPU used memory: "
+  //     << (block_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
+  // block_mgr.executeKernels(datablocks.size());
+  // block_mgr.copyFromCuda();
+  // // ----------------------------------------------
+  // block_mgr.translatePairsToSlices(datablocks, values);
+  // block_mgr.unregisterPinnedMemory(datablocks, seek_indices, copied_schema);
+  // block_mgr.clear();
 
   return accelerator::ACC_OK;
 }

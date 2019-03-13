@@ -17,6 +17,7 @@
 #include "util/filename.h"
 
 #include "accelerator/common.h"
+#include "accelerator/cuda/filter.h"
 #include "monitoring/perf_context_imp.h"
 #include "rocksdb/statistics.h"
 #include "table/get_context.h"
@@ -498,8 +499,8 @@ Status _ValueFilterAVX(const ReadOptions& options,
 }
 
 Status _ValueFilterGPU(const ReadOptions& options,
-                       const SlicewithSchema& /*schema_k*/,
-                       GetContext* /*get_context*/,
+                       const SlicewithSchema& schema_k,
+                       GetContext* get_context,
                        std::vector<TableReader *> readers) {
   std::cout << "[TableCache::_ValueFilterGPU] No. Reader: " << readers.size()
       << std::endl;
@@ -522,13 +523,13 @@ Status _ValueFilterGPU(const ReadOptions& options,
       << seek_indices.size()
       << std::endl;
 
-  // int err = ruda::recordBlockFilter(
-  //     datablocks, seek_indices, schema_k, total_entries,
-  //     *get_context->val_ptr());
+  int err = ruda::recordBlockFilter(
+      datablocks, seek_indices, schema_k, total_entries,
+      *get_context->val_ptr());
 
-  // if (err == accelerator::ACC_ERR) {
-  //   return Status::Aborted();
-  // }
+  if (err == accelerator::ACC_ERR) {
+    return Status::Aborted();
+  }
   return Status::OK();
 }
 

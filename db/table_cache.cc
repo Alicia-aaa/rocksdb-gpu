@@ -16,7 +16,8 @@
 #include "db/version_edit.h"
 #include "util/filename.h"
 
-#include "accelerator/avx/filter.h"
+#include "accelerator/common.h"
+#include "accelerator/cuda/filter.h"
 #include "monitoring/perf_context_imp.h"
 #include "rocksdb/statistics.h"
 #include "table/get_context.h"
@@ -513,18 +514,40 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
   return s;
 }
 
-// Status _ValueFilterGPU(const ReadOptions& options,
-//                        const Slice& k, const SlicewithSchema& schema_k,
-//                        GetContext* get_context,
-//                        std::vector<TableReader *> readers) {
-//   Status s;
-//   std::vector<char> datablocks;
-//   std::vector<uint64_t> seek_indices;
-//   for (auto reader : readers) {
-//     reader->GetDataBlocks(options, datablocks, seek_indices);
-//   }
-//   return s;
-// }
+Status _ValueFilterGPU(const ReadOptions& options,
+                       const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       std::vector<TableReader *> readers) {
+  std::cout << "[TableCache::_ValueFilterGPU] No. Reader: " << readers.size()
+      << std::endl;
+
+  // Collect datablocks & seek_indices from SST files.
+  std::vector<char> datablocks;
+  std::vector<uint64_t> seek_indices;
+  uint64_t total_entries = 0;
+  for (auto reader : readers) {
+    uint64_t seek_indices_start_offset = datablocks.size();
+    reader->GetDataBlocks(
+        options, datablocks, seek_indices, seek_indices_start_offset);
+    total_entries += reader->GetTableProperties()->num_entries;
+  }
+
+  std::cout << "[TableCache::_ValueFilterGPU] datablocks size: "
+      << datablocks.size()
+      << std::endl
+      << "[TableCache::_ValueFilterGPU] seek_indices size: "
+      << seek_indices.size()
+      << std::endl;
+
+  int err = ruda::recordBlockFilter(
+      datablocks, seek_indices, schema_k, total_entries,
+      *get_context->val_ptr());
+
+  if (err == accelerator::ACC_ERR) {
+    return Status::Aborted();
+  }
+  return Status::OK();
+}
 
 Status TableCache::ValueFilter(const ReadOptions& options,
                                const InternalKeyComparator& internal_comparator,
@@ -574,7 +597,8 @@ Status TableCache::ValueFilter(const ReadOptions& options,
           prefix_extractor);
       break;
     case accelerator::ValueFilterMode::GPU:
-      // s = _ValueFilterGPU(options, k, schema_k, get_context, readers);
+      std::cout << "[TableCache::ValueFilter] Execute GPU Filter" << std::endl;
+      s = _ValueFilterGPU(options, schema_k, get_context, readers);
       break;
     case accelerator::ValueFilterMode::NORMAL:
     default:

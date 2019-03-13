@@ -53,4 +53,10 @@ int sstStreamIntBlockFilterV2(std::vector<char> &datablocks,
                               std::vector<rocksdb::Slice> &keys,
                               std::vector<rocksdb::Slice> &values);
 
+int recordBlockFilter(/* const */ std::vector<char> &datablocks,
+                      /* const */ std::vector<uint64_t> &seek_indices,
+                      const rocksdb::SlicewithSchema &schema,
+                      const size_t max_results_count,
+                      std::vector<rocksdb::PinnableSlice> &results);
+
 }  // namespace ruda

@@ -329,13 +329,13 @@ class SstFileFilterReaderTest : public testing::Test {
     std::cout << "[DecodeDataBlocksOnGpu] END" << std::endl;
   }
 
-//  virtual void SetUp() {
-//    options_.comparator = test::Uint64Comparator();
-//    // uint64_t kNumKeys = 1000000000;
-//    uint64_t kNumKeys = 100000000; // 25000000;
-//    FileWrite(kNumKeys);
-//    // FileWriteVector(kNumKeys);
-//  }
+  virtual void SetUp() {
+    options_.comparator = test::Uint64Comparator();
+    // uint64_t kNumKeys = 1000000000;
+    uint64_t kNumKeys = 10000; // 25000000;
+    FileWrite(kNumKeys);
+    // FileWriteVector(kNumKeys);
+  }
 
  protected:
   Options options_;
@@ -511,6 +511,43 @@ TEST_F(SstFileFilterReaderTest, FilterOnAvx) {
   //       << std::endl;
   // }
 }
+
+// TEST_F(SstFileFilterReaderTest, RecordFilterOnGpu) {
+//   std::cout << "[GPU][RecordFilterOnGpu] START" << std::endl;
+//   int point = 0;
+//   std::chrono::high_resolution_clock::time_point begin, end;
+
+//   std::cout << "[GPU][RecordFilterOnGpu] POINT " << point++ << std::endl;
+//   accelerator::FilterContext ctx = { accelerator::LESS_EQ, 50,};
+//   std::vector<uint> schema_type, schema_length;
+//   SlicewithSchema schema("123", 3, ctx, 0, schema_type, schema_length);
+//   std::cout << "[GPU][RecordFilterOnGpu] POINT " << point++ << std::endl;
+
+//   options_.comparator = test::Uint64Comparator();
+//   std::vector<char> data;
+//   std::vector<uint64_t> seek_indices;
+//   size_t results_count;
+//   begin = std::chrono::high_resolution_clock::now();
+//   GetDataBlocks(data, seek_indices, results_count);
+//   end = std::chrono::high_resolution_clock::now();
+//   std::chrono::duration<float, std::milli> elapsed = end - begin;
+//   std::cout << "[GPU][GetDataBlocks] Execution Time: " << elapsed.count()
+//       << std::endl;
+//   std::vector<PinnableSlice> values;
+//   begin = std::chrono::high_resolution_clock::now();
+//   ruda::recordBlockFilter(data, seek_indices, schema, results_count, values);
+//   end = std::chrono::high_resolution_clock::now();
+//   elapsed = end - begin;
+//   std::cout << "[GPU][ruda::recordBlockFilter] Execution Time: "
+//       << elapsed.count() << std::endl;
+
+//   // std::cout << "Filter Results" << std::endl;
+//   // for (size_t i = 0; i < values.size(); ++i) {
+//   //   std::cout << "values[" << values[i]
+//   //       << "] results[" << results[i] << "]"
+//   //       << std::endl;
+//   // }
+// }
 
 }  // namespace rocksdb
 

@@ -13,6 +13,7 @@
 
 #include "accelerator/common.h"
 #include "accelerator/cuda/filter.h"
+#include "rocksdb/slice.h"
 
 const int kMaxRudaSliceDataSize = 64;
 
@@ -178,6 +179,82 @@ class RudaKVIndexPair {
   RudaIndexEntry value_index_;
 };
 
+// GPU-accessable Schema
+// Copy class of SlicewithSchema
+class RudaSchema {
+ public:
+  cudaError_t populateToCuda(const rocksdb::SlicewithSchema &schema) {
+    this->size = schema.size_;
+    this->target_idx = schema.target_idx;
+    this->ctx = schema.context;
+    this->field_type_size = schema.field_type.size();
+    this->field_length_size = schema.field_length.size();
+
+    cudaError_t err;
+    err = cudaMalloc((void **) &this->data, sizeof(char) * this->size);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaMalloc(
+        (void **) &this->field_type, sizeof(uint) * this->field_type_size);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaMalloc(
+        (void **) &this->field_length, sizeof(uint) * this->field_length_size);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaMemcpy(
+        this->data, schema.data_, sizeof(char) * this->size,
+        cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaMemcpy(
+        this->field_type, &schema.field_type[0],
+        sizeof(uint) * this->field_type_size,
+        cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaMemcpy(
+        this->field_length, &schema.field_length[0],
+        sizeof(uint) * this->field_length_size,
+        cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    return cudaSuccess;
+  }
+
+  cudaError_t clear() {
+    cudaError_t err;
+    err = cudaFree(data);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaFree(field_type);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    err = cudaFree(field_length);
+    if (err != cudaSuccess) {
+      return err;
+    }
+    return cudaSuccess;
+  }
+
+  char *data;
+  size_t size;
+  accelerator::FilterContext ctx;
+  int target_idx;
+  uint *field_type;
+  size_t field_type_size;
+  uint *field_length;
+  size_t field_length_size;
+};
+
 __host__ __device__
 uint64_t DecodeFixed64(const char* ptr);
 
@@ -192,5 +269,17 @@ void DecodeNFilterSubDataBlocks(// Parameters
                                 // Results
                                 unsigned long long int *results_idx,
                                 RudaKVIndexPair *results);
+
+__device__
+void DecodeNFilterOnSchema(// Parameters
+                           const char *cached_data,
+                           const uint64_t cached_data_size,
+                           const uint64_t block_offset,
+                           const uint64_t start_idx,
+                           const uint64_t end_idx,
+                           RudaSchema *schema,
+                           // Results
+                           unsigned long long int *results_idx,
+                           RudaKVIndexPair *results);
 
 }  // namespace ruda

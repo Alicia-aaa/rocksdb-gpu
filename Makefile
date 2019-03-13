@@ -1143,14 +1143,18 @@ package:
 # ---------------------------------------------------------------------------
 # 	Unit tests and tools
 # ---------------------------------------------------------------------------
-CUDA_LIBRARY = accelerator/cuda/cuda_library.o
-$(CUDA_LIBRARY): $(CUDAOBJECTS)
+CUDA_BIND = accelerator/cuda/cuda_bind.o
+CUDA_LIBRARY = accelerator/cuda/libruda.a
+$(CUDA_BIND): $(CUDAOBJECTS)
 	$(AM_NVCCLINK)
 
-$(LIBRARY): $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
+$(CUDA_LIBRARY): $(CUDAOBJECTS) $(CUDA_BIND)
+	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(CUDAOBJECTS) $(CUDA_BIND)
+
+$(LIBRARY): $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_BIND) $(CUDA_LIBRARY) $(AVXOBJECTS)
 	$(warning LOG....... LIBRARY exec)
 	$(AM_V_AR)rm -f $@
-	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_LIBRARY) $(AVXOBJECTS)
+	$(AM_V_at)$(AR) $(ARFLAGS) $@ $(LIBOBJECTS) $(CUDAOBJECTS) $(CUDA_BIND) $(AVXOBJECTS)
 
 $(TOOLS_LIBRARY): $(BENCH_LIB_SOURCES:.cc=.o) $(TOOL_LIB_SOURCES:.cc=.o) $(LIB_SOURCES:.cc=.o) $(TESTUTIL) $(ANALYZER_LIB_SOURCES:.cc=.o)
 	$(AM_V_AR)rm -f $@

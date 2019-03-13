@@ -1,8 +1,7 @@
+# Deprecated!!!
 # This Makefile uses only test for CUDA-g++ link testing...
 # Don't use this makefile for build up rocksDB
 
-# AM_NVCCLINK = $(AM_V_NVCCLD)$(NVCC) -dlink $^ -o $@ -lcudart -lcudadevrt -arch=sm_50
-# $(AM_V_NVCC)$(NVCC) $(NVCCFLAGS) -c $< -o $@
 .SUFFIXES: .cu .o
 
 AR = ar

@@ -2938,7 +2938,8 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
     }
 
     iiter->Next();
-    *(get_context->key_ptr()) = iiter->key();
+    if(iiter->Valid()) *(get_context->key_ptr()) = iiter->key();
+    else s = Status::TableEnd();
 
     if (schema_key.getTarget() != -1) {
       std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;

@@ -217,10 +217,10 @@ Status TransactionBaseImpl::Get(const ReadOptions& read_options,
 Status TransactionBaseImpl::ValueFilter(const ReadOptions& read_options,
                                         ColumnFamilyHandle* column_family,
                                         const SlicewithSchema& key,
-                                        std::vector<PinnableSlice> &pinnable_values) {
+                                        std::vector<PinnableSlice> &pinnable_values, int join_idx) {
   return write_batch_.ValueFilterFromBatchAndDB(db_, read_options,
                                                 column_family, key,
-                                                pinnable_values);
+                                                pinnable_values, join_idx);
 }
 
 Status TransactionBaseImpl::GetForUpdate(const ReadOptions& read_options,

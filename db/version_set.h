@@ -433,10 +433,10 @@ class VersionStorageInfo {
   std::vector<FileMetaData*>* files_;
   
   // GPU Accelerator 
-  std::vector<FileMetaData *>* table_related_files_;
-  std::vector<HistogramImpl *> * fd_read_hists;
-  std::vector<bool> * fd_skip_filters;
-  std::vector<int> * fd_levels;
+  std::vector<FdWithKeyRange *> *table_related_files_;
+  std::vector<HistogramImpl *> *fd_read_hists;
+  std::vector<bool> *fd_skip_filters;
+  std::vector<int> *fd_levels;
 
   // Level that L0 data should be compacted to. All levels < base_level_ should
   // be empty. -1 if it is not level-compaction so it's not applicable.
@@ -591,7 +591,7 @@ class Version {
                    const SlicewithSchema& schema_key,
                    std::vector<PinnableSlice> &value, Status* status,
                    MergeContext* merge_context,
-                   SequenceNumber* max_covering_tombstone_seq,
+                   SequenceNumber* max_covering_tombstone_seq, int join_idx,
                    bool* value_found = nullptr, bool* key_exists = nullptr,
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);
@@ -718,7 +718,7 @@ class Version {
   // A version number that uniquely represents this version. This is
   // used for debugging and logging purposes only.
   uint64_t version_number_;
-  Slice * key_to_find;
+  std::vector<Slice> key_to_find;
 
   Version(ColumnFamilyData* cfd, VersionSet* vset, const EnvOptions& env_opt,
           MutableCFOptions mutable_cf_options, uint64_t version_number = 0);

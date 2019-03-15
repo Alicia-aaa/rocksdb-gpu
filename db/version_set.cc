@@ -1188,10 +1188,10 @@ VersionStorageInfo::VersionStorageInfo(
       file_indexer_(user_comparator),
       compaction_style_(compaction_style),
       files_(new std::vector<FileMetaData*>[num_levels_]),
-      table_related_files_(new std::vector<FileMetaData*>[num_levels_]),
-      fd_read_hists(new std::vector<FileMetaData*>[num_levels_]),
-      fd_skip_filters(new std::vector<FileMetaData*>[num_levels_]),
-      fd_levels(new std::vector<FileMetaData*>[num_levels_]),
+      table_related_files_(new std::vector<FdWithKeyRange *>[10]),
+      fd_read_hists(new std::vector<HistogramImpl *>[10]),
+      fd_skip_filters(new std::vector<bool>[10]),
+      fd_levels(new std::vector<int>[10]),
       base_level_(num_levels_ == 1 ? -1 : 1),
       level_multiplier_(0.0),
       files_by_compaction_pri_(num_levels_),
@@ -1253,7 +1253,7 @@ Version::Version(ColumnFamilyData* column_family_data, VersionSet* vset,
       refs_(0),
       env_options_(env_opt),
       mutable_cf_options_(mutable_cf_options),
-      version_number_(version_number), key_to_find(nullptr){}
+      version_number_(version_number) {key_to_find = std::vector<Slice>(10, Slice());}
 
 void Version::Get(const ReadOptions& read_options, const LookupKey& k,
                   PinnableSlice* value, Status* status,
@@ -1421,10 +1421,12 @@ void Version::ValueFilter(const ReadOptions& read_options,
       storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
       user_comparator(), internal_comparator());
 
-    std::vector<FdWithKeyRange *> table_related_files_;
-    std::vector<HistogramImpl *> fd_read_hists;
-    std::vector<bool> fd_skip_filters;
-    std::vector<int> fd_levels;
+  FdWithKeyRange* f = fp.GetNextFileWithTable();
+
+  std::vector<FdWithKeyRange *> table_related_files_;
+  std::vector<HistogramImpl *> fd_read_hists;
+  std::vector<bool> fd_skip_filters;
+  std::vector<int> fd_levels;
  
    /* Implementation of entire traversal to search MetaData
    *
@@ -1478,13 +1480,13 @@ void Version::ValueFilter(const ReadOptions& read_options,
                                   fp.GetCurrentLevel());
       }
 
-      fd_read_hists->push_back(
+      fd_read_hists.push_back(
           cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
-      fd_skip_filters->push_back(
+      fd_skip_filters.push_back(
           IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
                           fp.IsHitFileLastInLevel()));
-      fd_levels->push_back(fp.GetCurrentLevel());
-      table_related_files_->push_back(f);
+      fd_levels.push_back(fp.GetCurrentLevel());
+      table_related_files_.push_back(f);
       f = fp.GetNextFileWithTable();   
     }
 
@@ -1506,7 +1508,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
                           const LookupKey& k, const SlicewithSchema& schema_k,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
-                          SequenceNumber* max_covering_tombstone_seq,
+                          SequenceNumber* max_covering_tombstone_seq, int join_idx,
                           bool* value_found, bool* key_exists,
                           SequenceNumber* seq, ReadCallback* callback,
                           bool* is_blob) {
@@ -1521,12 +1523,13 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
   }
 
   PinnedIteratorsManager pinned_iters_mgr;
-  if(key_to_find == nullptr) *key_to_find = ikey;
+
+  if (key_to_find[join_idx].size() == 0) key_to_find[join_idx] = k.internal_key();
   GetContext get_context(
       user_comparator(), merge_operator_, info_log_, db_statistics_,
       status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
-      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
-      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob, key_to_find);
+      value, value_found, merge_context, max_covering_tombstone_seq, this->env_, &key_to_find[join_idx],
+      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
   // Pin blocks that we read to hold merge operands
   if (merge_operator_) {
@@ -1540,7 +1543,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
 
   FdWithKeyRange* f = fp.GetNextFileWithTable();
 
-  if(storage_info_.table_related_files_->empty()) {
+  if(storage_info_.table_related_files_[join_idx].empty()) {
     while (f != nullptr) {
       if (*max_covering_tombstone_seq > 0) {
         // The remaining files we look at will only contain covered keys, so we
@@ -1558,13 +1561,13 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
                                   fp.GetCurrentLevel());
       }
 
-      storage_info_.fd_read_hists->push_back(
+      storage_info_.fd_read_hists[join_idx].push_back(
           cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
-      storage_info_.fd_skip_filters->push_back(
+      storage_info_.fd_skip_filters[join_idx].push_back(
           IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
                           fp.IsHitFileLastInLevel()));
-      storage_info_.fd_levels->push_back(fp.GetCurrentLevel());
-      storage_info_.table_related_files_->push_back(f);
+      storage_info_.fd_levels[join_idx].push_back(fp.GetCurrentLevel());
+      storage_info_.table_related_files_[join_idx].push_back(f);
       f = fp.GetNextFileWithTable();
      }
   }
@@ -1576,8 +1579,8 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilterBlock(
       vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
-      mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_, storage_info_.fd_read_hists,
-      storage_info_.fd_skip_filters, storage_info_.fd_levels);
+      mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_[join_idx], storage_info_.fd_read_hists[join_idx],
+      storage_info_.fd_skip_filters[join_idx], storage_info_.fd_levels[join_idx]);
 
   if (key_exists != nullptr)
       *key_exists = false;

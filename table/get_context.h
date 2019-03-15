@@ -58,6 +58,7 @@ class GetContext {
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
 
   /*GPU Accelerator*/
+
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
              const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
@@ -65,7 +66,16 @@ class GetContext {
              SequenceNumber* max_covering_tombstone_seq, Env* env,
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
-             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr, Slice *key_to_find);
+             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
+
+  GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
+             Logger* logger, Statistics* statistics, GetState init_state,
+             const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
+             MergeContext* merge_context,
+             SequenceNumber* max_covering_tombstone_seq, Env* env, Slice *key_to_find,
+             SequenceNumber* seq = nullptr,
+             PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
+             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
 
   void MarkKeyMayExist();
 

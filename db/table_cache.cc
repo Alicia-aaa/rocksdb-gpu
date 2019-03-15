@@ -616,17 +616,16 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
                                const Slice& k, const SlicewithSchema& schema_k,
                                GetContext* get_context,
                                const SliceTransform* prefix_extractor,
-                               std::vector<FdWithKeyRange *>* fds,
-                               std::vector<HistogramImpl *>* fd_read_hists,
-                               std::vector<bool>* fd_skip_filters,
-                               std::vector<int>* fd_levels) {
+                               std::vector<FdWithKeyRange *> &fds,
+                               std::vector<HistogramImpl *> &fd_read_hists,
+                               std::vector<bool> &fd_skip_filters,
+                               std::vector<int> &fd_levels) {
   Status s;
-  size_t fd_count = fds.size();
 
-  auto &fd = fds->back()->file_metadata->fd;
-  HistogramImpl *fd_read_hist = fd_read_hists->back();
-  bool fd_skip_filter = fd_skip_filters->back();
-  int fd_level = fd_levels->back();
+  auto &fd = fds.back()->file_metadata->fd;
+  HistogramImpl *fd_read_hist = fd_read_hists.back();
+  bool fd_skip_filter = fd_skip_filters.back();
+  int fd_level = fd_levels.back();
 
   TableReader* t = fd.table_reader;
   
@@ -657,13 +656,13 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
   }
 
   if(s.IsTableEnd()) {
-      fds->pop_back();
-      fd_read_hists->pop_back();
-      fd_skip_filters->pop_back();
-      fd_levels->pop_back();
-      get_context->key_ptr() = nullptr;
+      fds.pop_back();
+      fd_read_hists.pop_back();
+      fd_skip_filters.pop_back();
+      fd_levels.pop_back();
+      get_context->key_ptr()->clear();
 
-      if(fds->size() != 0) {
+      if(fds.size() != 0) {
         s = Status();
       }
   }

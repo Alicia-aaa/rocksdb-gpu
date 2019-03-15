@@ -1214,8 +1214,8 @@ Status DBImpl::Get(const ReadOptions& read_options,
 Status DBImpl::ValueFilter(const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family,
                            const SlicewithSchema& key,
-                           std::vector<PinnableSlice> &value) {
-  return ValueFilterImpl(read_options, column_family, key, value);
+                           std::vector<PinnableSlice> &value, int join_idx) {
+  return ValueFilterImpl(read_options, column_family, key, value, join_idx);
 }
 
 Status DBImpl::GetImpl(const ReadOptions& read_options,
@@ -1338,7 +1338,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                ColumnFamilyHandle* column_family,
                                const SlicewithSchema& key,
-                               std::vector<PinnableSlice> &pinnable_val,
+                               std::vector<PinnableSlice> &pinnable_val, int join_idx,
                                bool* value_found,
                                ReadCallback* callback, bool* is_blob_index) {
   StopWatch sw(env_, stats_, DB_GET);
@@ -1428,10 +1428,20 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
   }
 
   PERF_TIMER_GUARD(get_from_output_files_time);
-  sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
-                           &merge_context, &max_covering_tombstone_seq,
-                           value_found, nullptr, nullptr, callback,
-                           is_blob_index);
+  if (join_idx == -1 ) {
+      std::cout << "ValueFilter Called " << std::endl;
+      sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
+                               &merge_context, &max_covering_tombstone_seq,
+                               value_found, nullptr, nullptr, callback,
+                               is_blob_index);
+  } else {
+      std::cout << " ValueFilterblock called " << std::endl;
+      sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
+                               &merge_context, &max_covering_tombstone_seq, join_idx,
+                               value_found, nullptr, nullptr, callback,
+                               is_blob_index);
+  }
+
   RecordTick(stats_, MEMTABLE_MISS);
 
   {

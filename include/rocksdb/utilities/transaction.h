@@ -199,7 +199,7 @@ class Transaction {
   virtual Status ValueFilter(const ReadOptions& options,
                              ColumnFamilyHandle* column_family,
                              const SlicewithSchema& key,
-                             std::vector<PinnableSlice> &pinnable_val) = 0;
+                             std::vector<PinnableSlice> &pinnable_val, int join_idx) = 0;
 
   virtual std::vector<Status> MultiGet(
       const ReadOptions& options,

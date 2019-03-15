@@ -3,6 +3,9 @@
 #include "accelerator/cuda/block_decoder.h"
 #include "accelerator/cuda/cuda_util.h"
 
+#define NUM_TABLE_BYTES 4
+#define DEFAULT_KEY_BUF_SIZE 16
+
 namespace ruda {
 
 // Note(totoro): This implementation copied from 'block.h', 'coding.h',
@@ -202,6 +205,9 @@ void DecodeNFilterOnSchema(// Parameters
                            ruda::RudaKVIndexPair *results) {
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
+  size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
+  size_t key_buf_length = 0;
+  char *key_buf = new char[key_buf_size];
   while (subblock < limit) {
     uint32_t shared, non_shared, value_size;
     subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
@@ -211,13 +217,42 @@ void DecodeNFilterOnSchema(// Parameters
     if (shared == 0) {
       key = subblock;
       key_size = non_shared;
+      if (key_size > key_buf_size) {
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new char[key_buf_size];
+      }
+      memset(key_buf, 0, sizeof(char) * key_buf_size);
+      memcpy(key_buf, key, sizeof(char) * key_size);
+      key_buf_length = key_size;
     } else {
-      // TODO(totoro): We need to consider 'shared' data within subblock.
       key = subblock;
       key_size = shared + non_shared;
+      if (key_size > key_buf_size) {
+        char *new_key_buf = new char[key_size];
+        memcpy(new_key_buf, key_buf, sizeof(char) * shared);
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new_key_buf;
+      }
+      memcpy(key_buf + shared, key, sizeof(char) * non_shared);
+      key_buf_length = key_size;
     }
 
     const char *value = subblock + non_shared;
+
+    bool is_equal_to_schema = true;
+    for (size_t i = 0; i < NUM_TABLE_BYTES; ++i) {
+      if (key_buf[i] != schema->data[i]) {
+        is_equal_to_schema = false;
+        break;
+      }
+    }
+    if (!is_equal_to_schema) {
+      subblock = value + value_size;
+      continue;
+    }
+
     long decoded_value = rudaConvertRecord(schema, value);
     bool filter_result = false;
     switch (schema->ctx._op) {
@@ -241,11 +276,8 @@ void DecodeNFilterOnSchema(// Parameters
     }
     if (filter_result) {
       unsigned long long int idx = atomicAdd(results_idx, 1);
-      size_t key_start = key - cached_data;
       size_t value_start = value - cached_data;
       results[idx] = RudaKVIndexPair(
-          block_offset + key_start,
-          block_offset + key_start + key_size,
           block_offset + value_start,
           block_offset + value_start + value_size);
     }
@@ -253,6 +285,8 @@ void DecodeNFilterOnSchema(// Parameters
     // Next DataKey...
     subblock = value + value_size;
   }
+
+  delete[] key_buf;
 }
 
 }  // namespace ruda

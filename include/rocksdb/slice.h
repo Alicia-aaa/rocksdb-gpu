@@ -284,9 +284,10 @@ class SlicewithSchema : public Slice, public Cleanable {
     std::copy(skip.begin(), skip.end(), std::back_inserter(field_skip));
   }
 
-  SlicewithSchema&& clone() const {
-    return std::move(SlicewithSchema(
-        data_, size_, context, target_idx, field_type, field_length, field_skip));
+  SlicewithSchema* clone() const {
+    return new SlicewithSchema(
+        data_, size_, context, target_idx, field_type, field_length,
+        field_skip);
   }
 
   // No copy constructor and copy assignment allowed.
@@ -305,6 +306,7 @@ class SlicewithSchema : public Slice, public Cleanable {
       context = other.context;
       field_type = std::move(other.field_type);
       field_length = std::move(other.field_length);
+      field_skip = std::move(other.field_skip);
 	  }
 	  return *this;
   }

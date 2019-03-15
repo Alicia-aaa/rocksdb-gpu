@@ -515,9 +515,11 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
 }
 
 Status _ValueFilterGPU(const ReadOptions& options,
-                       const SlicewithSchema& schema_k,
+                       const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       std::vector<TableReader *> readers) {
+                       std::vector<TableReader *> readers,
+                       std::vector<bool> reader_skip_filters,
+                       const SliceTransform *prefix_extractor) {
   std::cout << "[TableCache::_ValueFilterGPU] No. Reader: " << readers.size()
       << std::endl;
 
@@ -539,13 +541,19 @@ Status _ValueFilterGPU(const ReadOptions& options,
       << seek_indices.size()
       << std::endl;
 
+  if (seek_indices.size() < options.threshold_seek_indices_size) {
+    return _ValueFilterAVX(
+        options, k, schema_k, get_context, readers, reader_skip_filters,
+        prefix_extractor);
+  }
+
   int err = ruda::recordBlockFilter(
       datablocks, seek_indices, schema_k, total_entries,
       *get_context->val_ptr());
-
   if (err == accelerator::ACC_ERR) {
     return Status::Aborted();
   }
+
   return Status::OK();
 }
 
@@ -598,7 +606,9 @@ Status TableCache::ValueFilter(const ReadOptions& options,
       break;
     case accelerator::ValueFilterMode::GPU:
       std::cout << "[TableCache::ValueFilter] Execute GPU Filter" << std::endl;
-      s = _ValueFilterGPU(options, schema_k, get_context, readers);
+      s = _ValueFilterGPU(
+          options, k, schema_k, get_context, readers, reader_skip_filters,
+          prefix_extractor);
       break;
     case accelerator::ValueFilterMode::NORMAL:
     default:

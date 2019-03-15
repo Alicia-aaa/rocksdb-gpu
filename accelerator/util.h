@@ -29,6 +29,11 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
   // printf("[util.h][convertRecord] START\n");
   // Skip other columns...
   for (int i = 0; i < target_idx; ++i) {
+    // TODO(totoro): Needs to handles 'm_null_bytes_in_rec' byte on record_ptr...
+    // If column has 'Nullable' constraint, record has a 1 byte for notifying
+    // 'this column value is null'.
+    // So, when decode a nullable column, below code must handles null notifier
+    // byte.
     if (schema_key.getType(i) == 15) {
       uint data_len = schema_key.getLength(i) == 1
           ? (unsigned char) record_ptr[0]

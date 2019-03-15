@@ -154,11 +154,12 @@ class RudaKVPair {
 class RudaIndexEntry {
  public:
   __host__ __device__
-  RudaIndexEntry() : start_(0), end_(0) {}
+  RudaIndexEntry() : used(false), start_(0), end_(0) {}
 
   __host__ __device__
-  RudaIndexEntry(size_t start, size_t end) : start_(start), end_(end) {}
+  RudaIndexEntry(size_t start, size_t end) : used(true), start_(start), end_(end) {}
 
+  bool used;
   size_t start_;
   size_t end_;
 };
@@ -167,7 +168,8 @@ class RudaKVIndexPair {
  public:
   __host__ __device__
   RudaKVIndexPair()
-      : key_index_(RudaIndexEntry()), value_index_(RudaIndexEntry()) {}
+      : key_index_(RudaIndexEntry()), shared_key_index_(RudaIndexEntry()),
+        value_index_(RudaIndexEntry()) {}
 
   __host__ __device__
   RudaKVIndexPair(size_t key_start, size_t key_end, size_t value_start,
@@ -175,7 +177,20 @@ class RudaKVIndexPair {
       : key_index_(RudaIndexEntry(key_start, key_end)),
         value_index_(RudaIndexEntry(value_start, value_end)) {}
 
+  __host__ __device__
+  RudaKVIndexPair(size_t value_start, size_t value_end)
+      : value_index_(RudaIndexEntry(value_start, value_end)) {}
+
+  __host__ __device__
+  RudaKVIndexPair(size_t key_start, size_t key_end,
+                  size_t shared_key_start, size_t shared_key_end,
+                  size_t value_start, size_t value_end)
+      : key_index_(RudaIndexEntry(key_start, key_end)),
+        shared_key_index_(RudaIndexEntry(shared_key_start, shared_key_end)),
+        value_index_(RudaIndexEntry(value_start, value_end)) {}
+
   RudaIndexEntry key_index_;
+  RudaIndexEntry shared_key_index_;
   RudaIndexEntry value_index_;
 };
 
@@ -189,60 +204,35 @@ class RudaSchema {
     this->ctx = schema.context;
     this->field_type_size = schema.field_type.size();
     this->field_length_size = schema.field_length.size();
+    this->field_skip_size = schema.field_skip.size();
 
-    cudaError_t err;
-    err = cudaMalloc((void **) &this->data, sizeof(char) * this->size);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaMalloc(
-        (void **) &this->field_type, sizeof(uint) * this->field_type_size);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaMalloc(
-        (void **) &this->field_length, sizeof(uint) * this->field_length_size);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaMemcpy(
-        this->data, schema.data_, sizeof(char) * this->size,
+    cudaMalloc((void **) &data, sizeof(char) * size);
+    cudaMalloc((void **) &field_type, sizeof(uint) * field_type_size);
+    cudaMalloc((void **) &field_length, sizeof(uint) * field_length_size);
+    cudaMalloc((void **) &field_skip, sizeof(uint) * field_skip_size);
+
+    cudaMemcpy(
+        data, schema.data_, sizeof(char) * size, cudaMemcpyHostToDevice);
+    cudaMemcpy(
+        field_type, &schema.field_type[0], sizeof(uint) * field_type_size,
         cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaMemcpy(
-        this->field_type, &schema.field_type[0],
-        sizeof(uint) * this->field_type_size,
+    cudaMemcpy(
+        field_length, &schema.field_length[0],
+        sizeof(uint) * field_length_size,
         cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaMemcpy(
-        this->field_length, &schema.field_length[0],
-        sizeof(uint) * this->field_length_size,
+    cudaMemcpy(
+        field_skip, &schema.field_skip[0],
+        sizeof(uint) * field_skip_size,
         cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    return cudaSuccess;
+
+    return cudaGetLastError();
   }
 
   cudaError_t clear() {
-    cudaError_t err;
-    err = cudaFree(data);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaFree(field_type);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    err = cudaFree(field_length);
-    if (err != cudaSuccess) {
-      return err;
-    }
-    return cudaSuccess;
+    cudaFree(data);
+    cudaFree(field_type);
+    cudaFree(field_length);
+    return cudaGetLastError();
   }
 
   char *data;
@@ -253,6 +243,8 @@ class RudaSchema {
   size_t field_type_size;
   uint *field_length;
   size_t field_length_size;
+  uint *field_skip;
+  size_t field_skip_size;
 };
 
 __host__ __device__

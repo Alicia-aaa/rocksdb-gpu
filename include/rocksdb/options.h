@@ -1174,6 +1174,10 @@ struct ReadOptions {
   // Value Filter mode (AVX, GPU, NORMAL)
   accelerator::ValueFilterMode value_filter_mode;
 
+  // GPU Accelerate
+  // Threshold value of number of seek_indices for executing GPU...
+  size_t threshold_seek_indices_size = 256;
+
   ReadOptions();
   ReadOptions(bool cksum, bool cache);
   ReadOptions(accelerator::ValueFilterMode mode);

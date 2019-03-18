@@ -146,6 +146,7 @@ class GetContext {
   MergeContext* merge_context_;
   SequenceNumber* max_covering_tombstone_seq_;
   Env* env_;
+  Slice * key_to_find;
   // If a key is found, seq_ will be set to the SequenceNumber of most recent
   // write to the key or kMaxSequenceNumber if unknown
   SequenceNumber* seq_;
@@ -155,7 +156,6 @@ class GetContext {
   ReadCallback* callback_;
   bool sample_;
   bool* is_blob_index_;
-  Slice * key_to_find;
 };
 
 void replayGetContextLog(const Slice& replay_log, const Slice& user_key,

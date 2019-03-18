@@ -55,17 +55,17 @@ GetContext::GetContext(const Comparator* ucmp,
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(pinnable_val),
-	  values(nullptr),
+	    values(nullptr),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
       env_(env),
+      key_to_find(nullptr),
       seq_(seq),
       replay_log_(nullptr),
       pinned_iters_mgr_(_pinned_iters_mgr),
       callback_(callback),
-      is_blob_index_(is_blob_index),
-      key_to_find(nullptr) {
+      is_blob_index_(is_blob_index) {
   if (seq_) {
     *seq_ = kMaxSequenceNumber;
   }
@@ -93,12 +93,12 @@ GetContext::GetContext(const Comparator* ucmp,
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
       env_(env),
+      key_to_find(nullptr),
       seq_(seq),
       replay_log_(nullptr),
       pinned_iters_mgr_(_pinned_iters_mgr),
       callback_(callback),
-      is_blob_index_(is_blob_index),
-      key_to_find(nullptr) {
+      is_blob_index_(is_blob_index) {
   if (seq_) {
     *seq_ = kMaxSequenceNumber;
   }
@@ -110,7 +110,8 @@ GetContext::GetContext(const Comparator* ucmp,
                        Statistics* statistics, GetState init_state,
                        const Slice& user_key, std::vector<PinnableSlice> &pinnable_val,
                        bool* value_found, MergeContext* merge_context,
-                       SequenceNumber* _max_covering_tombstone_seq, Env* env, Slice* key_to_find_,
+                       SequenceNumber* _max_covering_tombstone_seq, Env* env,
+                       Slice* key_to_find_,
                        SequenceNumber* seq,
                        PinnedIteratorsManager* _pinned_iters_mgr,
                        ReadCallback* callback, bool* is_blob_index)
@@ -121,7 +122,7 @@ GetContext::GetContext(const Comparator* ucmp,
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(nullptr),
-	  values(&pinnable_val),
+	    values(&pinnable_val),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),

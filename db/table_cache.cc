@@ -610,6 +610,7 @@ Status TableCache::ValueFilter(const ReadOptions& options,
           options, k, schema_k, get_context, readers, reader_skip_filters,
           prefix_extractor);
       break;
+    case accelerator::ValueFilterMode::AVX_BLOCK:
     case accelerator::ValueFilterMode::NORMAL:
     default:
       break;
@@ -651,15 +652,14 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
   }
 
   switch (options.value_filter_mode) {
-    case accelerator::ValueFilterMode::AVX:
+    case accelerator::ValueFilterMode::AVX_BLOCK:
       std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
       s = _ValueFilterAVXBlock(
           options, k, schema_k, get_context, t, fd_skip_filter,
           prefix_extractor);
       break;
+    case accelerator::ValueFilterMode::AVX:
     case accelerator::ValueFilterMode::GPU:
-      // s = _ValueFilterGPU(options, k, schema_k, get_context, readers);
-      break;
     case accelerator::ValueFilterMode::NORMAL:
     default:
       break;

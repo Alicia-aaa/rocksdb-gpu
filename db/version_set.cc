@@ -1427,7 +1427,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
   std::vector<HistogramImpl *> fd_read_hists;
   std::vector<bool> fd_skip_filters;
   std::vector<int> fd_levels;
- 
+
    /* Implementation of entire traversal to search MetaData
    *
    */
@@ -1487,16 +1487,12 @@ void Version::ValueFilter(const ReadOptions& read_options,
                           fp.IsHitFileLastInLevel()));
       fd_levels.push_back(fp.GetCurrentLevel());
       table_related_files_.push_back(f);
-      f = fp.GetNextFileWithTable();   
+      f = fp.GetNextFileWithTable();
     }
-
-  // Set ValueFilterMode
-  ReadOptions vf_read_options = read_options;
-  vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;
 
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilter(
-      vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
+      read_options, *internal_comparator(), ikey, schema_k, &get_context,
       mutable_cf_options_.prefix_extractor.get(), table_related_files_, fd_read_hists,
       fd_skip_filters, fd_levels);
 
@@ -1572,13 +1568,9 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
      }
   }
 
-  // Set ValueFilterMode to AVX
-  ReadOptions vf_read_options = read_options;
-  vf_read_options.value_filter_mode = accelerator::ValueFilterMode::AVX;
-
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilterBlock(
-      vf_read_options, *internal_comparator(), ikey, schema_k, &get_context,
+      read_options, *internal_comparator(), ikey, schema_k, &get_context,
       mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_[join_idx], storage_info_.fd_read_hists[join_idx],
       storage_info_.fd_skip_filters[join_idx], storage_info_.fd_levels[join_idx]);
 

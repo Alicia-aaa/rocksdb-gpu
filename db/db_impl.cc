@@ -1428,18 +1428,18 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
   }
 
   PERF_TIMER_GUARD(get_from_output_files_time);
-  if (join_idx == -1 ) {
-      std::cout << "ValueFilter Called " << std::endl;
-      sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
-                               &merge_context, &max_covering_tombstone_seq,
-                               value_found, nullptr, nullptr, callback,
-                               is_blob_index);
+  if (read_options.value_filter_mode == accelerator::ValueFilterMode::AVX_BLOCK) {
+    std::cout << " ValueFilterblock called " << std::endl;
+    sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
+                                  &merge_context, &max_covering_tombstone_seq,
+                                  join_idx, value_found, nullptr, nullptr,
+                                  callback, is_blob_index);
   } else {
-      std::cout << " ValueFilterblock called " << std::endl;
-      sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
-                               &merge_context, &max_covering_tombstone_seq, join_idx,
-                               value_found, nullptr, nullptr, callback,
-                               is_blob_index);
+    std::cout << "ValueFilter Called " << std::endl;
+    sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
+                              &merge_context, &max_covering_tombstone_seq,
+                              value_found, nullptr, nullptr, callback,
+                              is_blob_index);
   }
 
   RecordTick(stats_, MEMTABLE_MISS);

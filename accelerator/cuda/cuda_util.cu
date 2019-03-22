@@ -19,6 +19,16 @@ int sint4korr(const char *record_ptr) {
 }
 
 __device__
+uint uint2korr(const char *record_ptr) {
+  unsigned short result;
+  char *result_ptr = (char *) &result;
+  for (unsigned long i = 0; i < sizeof(unsigned short); ++i) {
+    result_ptr[i] = record_ptr[i];
+  }
+  return result;
+}
+
+__device__
 int uint3korr(const char *record_ptr) {
   unsigned int result;
   char *result_ptr = (char *) &result;
@@ -45,7 +55,7 @@ long rudaConvertRecord(RudaSchema *schema, const char *record_ptr) {
     if (schema->field_type[i] == 15) {
       uint data_len = schema->field_length[i] == 1
           ? (unsigned char) record_ptr[0]
-          : (unsigned short)(*((unsigned short *)(record_ptr)));
+          : uint2korr(record_ptr);
       record_ptr += data_len + schema->field_length[i] + schema->field_skip[i];
     } else {
       record_ptr += (schema->field_length[i] + schema->field_skip[i]);

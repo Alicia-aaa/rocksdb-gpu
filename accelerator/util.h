@@ -38,7 +38,7 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
       uint data_len = schema_key.getLength(i) == 1
           ? (unsigned char) record_ptr[0]
           : (unsigned short)(*((unsigned short *)(record_ptr)));
-      record_ptr += data_len + schema_key.getSkip(i);
+      record_ptr += data_len + schema_key.getLength(i) + schema_key.getSkip(i);
     } else {
       record_ptr += (schema_key.getLength(i) + schema_key.getSkip(i));
     }
@@ -46,11 +46,16 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
   record_ptr += schema_key.getSkip(target_idx);
   // printf("[util.h][convertRecord] After skip other columns\n");
   if(schema_key.getType(target_idx) == 14) { // DATE type
-      result = uint3korr(record_ptr);
-
-    //  result = (j % 32L) + (j / 32L % 16L) * 100L + (j/(16L*32L)) * 10000L;
+    result = uint3korr(record_ptr);
+    // long year = result / (16 * 32);
+    // long month = (result - year) / 32;
+    // long day = (result - year - month);
+    // printf("[util.h][convertRecord] year: %ld, month: %ld, day: %ld\n",
+    //   year, month, day);
+    // long test = (result % 32L) + (result / 32L % 16L) * 100L + (result/(16L*32L)) * 10000L;
+    // printf("[util.h][convertRecord] test: %ld\n", test);
   } else if (schema_key.getType(target_idx) == 3) { // Long Type
-      result = sint4korr(record_ptr);
+    result = sint4korr(record_ptr);
   }
   // printf("[util.h][convertRecord] converted value: %ld\n", result);
   return result;

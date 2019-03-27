@@ -48,6 +48,7 @@
 #include "table/plain_table_factory.h"
 #include "table/table_reader.h"
 #include "table/two_level_iterator.h"
+#include <rocksdb/accelerator/gpu_manager.h>
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
@@ -57,7 +58,7 @@
 
 namespace rocksdb {
 
-namespace {
+//namespace {
 
 // Find File in LevelFilesBrief data structure
 // Within an index range defined by left and right
@@ -317,6 +318,11 @@ class FilePicker {
   // GetNextFile()) is at the last index in its level.
   bool IsHitFileLastInLevel() { return is_hit_file_last_in_level_; }
 
+  const InternalKeyComparator * GetInternalComparator() { return internal_comparator_; }
+
+  const Slice GetInternalKey() { return ikey_; }
+  const Slice GetUserKey() { return user_key_; }
+
  private:
   unsigned int num_levels_;
   unsigned int curr_level_;
@@ -408,7 +414,7 @@ class FilePicker {
     return false;
   }
 };
-}  // anonymous namespace
+//}  // anonymous namespace
 
 VersionStorageInfo::~VersionStorageInfo() { delete[] files_; }
 
@@ -1576,6 +1582,49 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
 
   if (key_exists != nullptr)
       *key_exists = false;
+}
+
+void Version::AsyncFilterBlock(const ReadOptions& read_options,
+                          rocksdb::GPUManager *gpu_manager_, Status* status,
+                          MergeContext* merge_context,
+                          SequenceNumber* max_covering_tombstone_seq, SequenceNumber snapshot,
+                          bool* value_found, bool* /*key_exists*/,
+                          SequenceNumber* seq, ReadCallback* callback,
+                          bool* is_blob) {
+
+  std::vector<SlicewithScheama> schema_k = *(gpu_manager_->schemakey);
+  for (uint i = 0; i < schema_k.size(); i++) {
+    LookupKey k(schema_k[i], snapshot);
+    Slice ikey = k.internal_key();
+    Slice user_key = k.user_key();
+
+    assert(status->ok() || status->IsMergeInProgress());
+
+
+    PinnedIteratorsManager pinned_iters_mgr;
+
+    GetContext get_context(
+        user_comparator(), merge_operator_, info_log_, db_statistics_,
+        status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
+        *value[i], value_found, merge_context, max_covering_tombstone_seq, this->env_,
+        seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
+
+    // Pin blocks that we read to hold merge operands
+    if (merge_operator_) {
+      pinned_iters_mgr.StartPinning();
+    }
+
+    FilePicker fp(
+        storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
+        storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
+        user_comparator(), internal_comparator());
+
+    gpu_manager_->fp_list.push_back(fp);
+    gpu_manager_->context_list.push_back(get_context);
+  }
+
+  /* manager Queue start */
+  gpu_manager_->q_start();
 }
 
 bool Version::IsFilterSkipped(int level, bool is_file_last_in_level) {

@@ -351,6 +351,11 @@ class DB {
     return Status();
   }
 
+  virtual Status AsyncFilter(ColumnFamilyHandle* /*column_family*/,
+                             rocksdb::GPUManager */*gpu_manager_*/) {
+    return Status();
+  }
+
   // If keys[i] does not exist in the database, then the i'th returned
   // status will be one for which Status::IsNotFound() is true, and
   // (*values)[i] will be set to some arbitrary value (often ""). Otherwise,

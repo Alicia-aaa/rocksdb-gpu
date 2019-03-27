@@ -129,6 +129,16 @@ class DBImpl : public DB {
                          ReadCallback* callback = nullptr,
                          bool* is_blob_index = nullptr);
 
+  using DB::AsyncFilter;
+  virtual Status AsyncFilter(ColumnFamilyHandle* column_family,
+                             rocksdb::GPUManager *gpu_manager_) override;
+
+  Status AsyncFilterImpl(ColumnFamilyHandle* column_family,
+                         rocksdb::GPUManager *gpu_manager_,
+                         bool* value_found = nullptr,
+                         ReadCallback* callback = nullptr,
+                         bool* is_blob_index = nullptr);
+
   using DB::MultiGet;
   virtual std::vector<Status> MultiGet(
       const ReadOptions& options,

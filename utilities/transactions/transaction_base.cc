@@ -223,6 +223,11 @@ Status TransactionBaseImpl::ValueFilter(const ReadOptions& read_options,
                                                 pinnable_values, join_idx);
 }
 
+Status TransactionBaseImpl::AsyncFilter(ColumnFamilyHandle* column_family,
+                                        rocksdb::GPUManager *gpu_manager_) {
+  return write_batch_.AsyncFilterFromBatchAndDB(db_, column_family, gpu_manager_);
+}
+
 Status TransactionBaseImpl::GetForUpdate(const ReadOptions& read_options,
                                          ColumnFamilyHandle* column_family,
                                          const Slice& key, std::string* value,

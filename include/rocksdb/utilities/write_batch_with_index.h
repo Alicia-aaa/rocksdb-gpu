@@ -213,6 +213,9 @@ class WriteBatchWithIndex : public WriteBatchBase {
                                    const SlicewithSchema& key,
                                    std::vector<PinnableSlice>& values, int join_idx);
 
+  Status AsyncFilterFromBatchAndDB(DB* db, ColumnFamilyHandle* column_family,
+                                   rocksdb::GPUManager *gpu_manager_);
+
 
   // Records the state of the batch for future calls to RollbackToSavePoint().
   // May be called multiple times to set multiple save points.
@@ -258,6 +261,10 @@ class WriteBatchWithIndex : public WriteBatchBase {
                                    ColumnFamilyHandle* column_family,
                                    const SlicewithSchema& key,
                                    std::vector<PinnableSlice> & values, int join_idx,
+                                   ReadCallback* callback);
+
+  Status AsyncFilterFromBatchAndDB(DB* db, ColumnFamilyHandle* column_family,
+                                   rocksdb::GPUManager *gpu_manager_,
                                    ReadCallback* callback);
   struct Rep;
   std::unique_ptr<Rep> rep;

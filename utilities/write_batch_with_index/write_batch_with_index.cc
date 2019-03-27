@@ -946,6 +946,27 @@ Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
   return s;
 }
 
+Status WriteBatchWithIndex::AsyncFilterFromBatchAndDB(
+    DB* db, ColumnFamilyHandle* column_family, rocksdb::GPUManager *gpu_manager_) {
+  return AsyncFilterFromBatchAndDB(
+      db, column_family, gpu_manager_, nullptr);
+}
+
+Status WriteBatchWithIndex::AsyncFilterFromBatchAndDB(
+    DB* db, ColumnFamilyHandle* column_family,
+    rocksdb::GPUManager *gpu_manager_,
+    ReadCallback* callback) {
+  Status s;
+  // Did not find key in batch OR could not resolve Merges.  Try DB.
+  if (!callback) {
+    s = db->AsyncFilter(column_family, gpu_manager_);
+  } else {
+    s = static_cast_with_check<DBImpl, DB>(db->GetRootDB())->AsyncFilterImpl(
+       column_family, gpu_manager_, nullptr, callback);
+  }
+  return s;
+}
+
 void WriteBatchWithIndex::SetSavePoint() { rep->write_batch.SetSavePoint(); }
 
 Status WriteBatchWithIndex::RollbackToSavePoint() {

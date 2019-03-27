@@ -106,6 +106,16 @@ class TableCache {
                      std::vector<bool>& fd_skip_filters,
                      std::vector<int>& fd_levels);
 
+  Status AsyncFilter(const ReadOptions& options,
+                     const InternalKeyComparator& internal_comparator,
+                     const Slice& k, const SlicewithSchema& schema_k,
+                     GetContext* get_context,
+                     const SliceTransform* prefix_extractor,
+                     FdWithKeyRange * fds,
+                     HistogramImpl * fd_read_hists,
+                     bool fd_skip_filters,
+                     int fd_levels);
+
   // Evict any entry for the specified file number
   static void Evict(Cache* cache, uint64_t file_number);
 

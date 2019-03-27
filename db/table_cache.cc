@@ -557,6 +557,39 @@ Status _ValueFilterGPU(const ReadOptions& options,
   return Status::OK();
 }
 
+Status _AsyncFilterGPU(const ReadOptions& options,
+                       const Slice& k, const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       TableReader * reader,
+                       bool reader_skip_filter,
+                       const SliceTransform *prefix_extractor) {
+
+  // Collect datablocks & seek_indices from SST files.
+  std::vector<char> datablocks;
+  std::vector<uint64_t> seek_indices;
+  uint64_t total_entries = 0;
+  uint64_t seek_indices_start_offset = datablocks.size();
+  reader->GetDataBlocks(
+        options, datablocks, seek_indices, seek_indices_start_offset);
+  total_entries += reader->GetTableProperties()->num_entries;
+
+  std::cout << "[TableCache::_ValueFilterGPU] datablocks size: "
+      << datablocks.size()
+      << std::endl
+      << "[TableCache::_ValueFilterGPU] seek_indices size: "
+      << seek_indices.size()
+      << std::endl;
+
+  int err = ruda::recordBlockFilter(
+      datablocks, seek_indices, schema_k, total_entries,
+      *get_context->val_ptr());
+  if (err == accelerator::ACC_ERR) {
+    return Status::Aborted();
+  }
+
+  return Status::OK();
+}
+
 Status TableCache::ValueFilter(const ReadOptions& options,
                                const InternalKeyComparator& internal_comparator,
                                const Slice& k, const SlicewithSchema& schema_k,
@@ -677,6 +710,41 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
       }
   }
 
+  return s;
+}
+
+Status TableCache::AsyncFilter(const ReadOptions& options,
+                               const InternalKeyComparator& internal_comparator,
+                               const Slice& k, const SlicewithSchema& schema_k,
+                               GetContext* get_context,
+                               const SliceTransform* prefix_extractor,
+                               FdWithKeyRange * fds,
+                               HistogramImpl * fd_read_hist,
+                               bool fd_skip_filter,
+                               int fd_level) {
+  Status s;
+  auto &fd = fds->file_metadata->fd;
+
+  TableReader* t = fd.table_reader;
+  Cache::Handle *handle = nullptr;
+
+  if (t == nullptr) {
+    s = FindTable(
+        env_options_, internal_comparator, fd, &handle, prefix_extractor,
+        options.read_tier == kBlockCacheTier /* no_io */,
+        true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
+    if (s.ok()) {
+      t = GetTableReaderFromHandle(handle);
+    }
+  }
+
+  s =  _AsyncFilterGPU(
+           options, k, schema_k, get_context, t, fd_skip_filter,
+           prefix_extractor);
+
+  if (handle != nullptr) {
+    ReleaseHandle(handle);
+  }
   return s;
 }
 

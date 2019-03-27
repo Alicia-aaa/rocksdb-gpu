@@ -1218,6 +1218,11 @@ Status DBImpl::ValueFilter(const ReadOptions& read_options,
   return ValueFilterImpl(read_options, column_family, key, value, join_idx);
 }
 
+Status DBImpl::AsyncFilter(ColumnFamilyHandle* column_family,
+                           rocksdb::GPUManager *gpu_manager_) {
+  return AsyncFilterImpl(column_family, gpu_manger_);
+}
+
 Status DBImpl::GetImpl(const ReadOptions& read_options,
                        ColumnFamilyHandle* column_family, const Slice& key,
                        PinnableSlice* pinnable_val, bool* value_found,
@@ -1441,6 +1446,107 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                               value_found, nullptr, nullptr, callback,
                               is_blob_index);
   }
+
+  RecordTick(stats_, MEMTABLE_MISS);
+
+  {
+    PERF_TIMER_GUARD(get_post_process_time);
+    ReturnAndCleanupSuperVersion(cfd, sv);
+    RecordTick(stats_, NUMBER_KEYS_READ);
+  }
+  return s;
+}
+
+Status DBImpl::AsyncFilterImpl(ColumnFamilyHandle* column_family,
+                               rocksdb::GPUManager *gpu_manager_,
+                               bool* value_found,
+                               ReadCallback* callback, bool* is_blob_index) {
+  StopWatch sw(env_, stats_, DB_GET);
+  PERF_TIMER_GUARD(get_snapshot_time);
+
+  ReadOptions read_options = *(gpu_manager_->read_options);
+  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
+  auto cfd = cfh->cfd();
+
+  // Acquire SuperVersion
+  SuperVersion* sv = GetAndRefSuperVersion(cfd);
+
+  TEST_SYNC_POINT("DBImpl::GetImpl:1");
+  TEST_SYNC_POINT("DBImpl::GetImpl:2");
+
+  SequenceNumber snapshot;
+  if (read_options.snapshot != nullptr) {
+    // Note: In WritePrepared txns this is not necessary but not harmful
+    // either.  Because prep_seq > snapshot => commit_seq > snapshot so if
+    // a snapshot is specified we should be fine with skipping seq numbers
+    // that are greater than that.
+    //
+    // In WriteUnprepared, we cannot set snapshot in the lookup key because we
+    // may skip uncommitted data that should be visible to the transaction for
+    // reading own writes.
+    snapshot =
+        reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)->number_;
+    if (callback) {
+      snapshot = std::max(snapshot, callback->MaxUnpreparedSequenceNumber());
+    }
+  } else {
+    // Since we get and reference the super version before getting
+    // the snapshot number, without a mutex protection, it is possible
+    // that a memtable switch happened in the middle and not all the
+    // data for this snapshot is available. But it will contain all
+    // the data available in the super version we have, which is also
+    // a valid snapshot to read from.
+    // We shouldn't get snapshot before finding and referencing the super
+    // version because a flush happening in between may compact away data for
+    // the snapshot, but the snapshot is earlier than the data overwriting it,
+    // so users may see wrong results.
+    snapshot = last_seq_same_as_publish_seq_
+                   ? versions_->LastSequence()
+                   : versions_->LastPublishedSequence();
+  }
+  TEST_SYNC_POINT("DBImpl::GetImpl:3");
+  TEST_SYNC_POINT("DBImpl::GetImpl:4");
+
+  // Prepare to store a list of merge operations if merge occurs.
+  MergeContext merge_context;
+  SequenceNumber max_covering_tombstone_seq = 0;
+
+  Status s;
+  // First look in the memtable, then in the immutable memtable (if any).
+  // s is both in/out. When in, s could either be OK or MergeInProgress.
+  // merge_operands will contain the sequence of merges in the latter case.
+
+ // LookupKey lkey(key, snapshot);
+ // PERF_TIMER_STOP(get_snapshot_time);
+
+  /* TODO : require implementation for memtable iterate */
+
+//  bool skip_memtable = (read_options.read_tier == kPersistedTier &&
+//                        has_unpersisted_data_.load(std::memory_order_relaxed));
+//  if (!skip_memtable) {
+//    sv->mem->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+//                         &max_covering_tombstone_seq, read_options,
+//                         callback, is_blob_index);
+//    if (s.ok()) {
+//      RecordTick(stats_, MEMTABLE_HIT);
+//    }
+//    sv->imm->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+//                         &max_covering_tombstone_seq, read_options,
+//                         callback, is_blob_index);
+//    if (s.ok()) {
+//      RecordTick(stats_, MEMTABLE_HIT);
+//    }
+//    if (!s.ok() && !s.IsMergeInProgress()) {
+//      ReturnAndCleanupSuperVersion(cfd, sv);
+//      return s;
+//    }
+//  }
+
+  PERF_TIMER_GUARD(get_from_output_files_time);
+  sv->current->AsyncFilterBlock(read_options, gpu_manager_, &s,
+                                  &merge_context, &max_covering_tombstone_seq, snapshot,
+                                  value_found, nullptr, nullptr,
+                                  callback, is_blob_index);
 
   RecordTick(stats_, MEMTABLE_MISS);
 

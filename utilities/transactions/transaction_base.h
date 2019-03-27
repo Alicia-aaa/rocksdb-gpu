@@ -68,6 +68,10 @@ class TransactionBaseImpl : public Transaction {
                      const SlicewithSchema& key,
                      std::vector<PinnableSlice> &values, int join_idx) override;
 
+  using Transaction::AsyncFilter;
+  Status AsyncFilter(ColumnFamilyHandle* column_family,
+                     rocksdb::GPUManager *gpu_manager_) override;
+
 
   using Transaction::GetForUpdate;
   Status GetForUpdate(const ReadOptions& options,

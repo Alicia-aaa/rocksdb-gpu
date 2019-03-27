@@ -62,6 +62,7 @@ class MergeContext;
 class ColumnFamilySet;
 class TableCache;
 class MergeIteratorBuilder;
+class FilePicker;
 
 // Return the smallest index i such that file_level.files[i]->largest >= key.
 // Return file_level.num_files if there is no such file.
@@ -596,6 +597,14 @@ class Version {
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);
 
+  void AsyncFilterBlock(const ReadOptions&,
+                   rocksdb::GPUManager *gpu_manager_, Status* status,
+                   MergeContext* merge_context,
+                   SequenceNumber* max_covering_tombstone_seq, SequenceNumber snapshot,
+                   bool* value_found = nullptr, bool* key_exists = nullptr,
+                   SequenceNumber* seq = nullptr,
+                   ReadCallback* callback = nullptr, bool* is_blob = nullptr);
+
   // Loads some stats information from files. Call without mutex held. It needs
   // to be called before applying the version to the version set.
   void PrepareApply(const MutableCFOptions& mutable_cf_options,
@@ -665,6 +674,8 @@ class Version {
   uint64_t GetSstFilesSize();
 
   MutableCFOptions GetMutableCFOptions() { return mutable_cf_options_; }
+
+  TableCache * GetTableCache() { return table_cache_; }
 
  private:
   Env* env_;

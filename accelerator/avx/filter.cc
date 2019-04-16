@@ -88,12 +88,22 @@ int _recordNativeFilter(std::vector<rocksdb::Slice> &raw_records,
 }
 
 int recordFilter(std::vector<rocksdb::Slice> &raw_records,
-                    const rocksdb::SlicewithSchema &schema_key,
-                    std::vector<rocksdb::PinnableSlice> &results) {
+                 const rocksdb::SlicewithSchema &schema_key,
+                 std::vector<rocksdb::PinnableSlice> &results) {
   // printf("[AVX][recordIntFilter] START raw_record_size: %lu\n", raw_records.size());
   uint64_t pivot = static_cast<uint64_t>(schema_key.context._pivot);
   int size = (int) raw_records.size();
 
+  // If operator is INVALID, put all records to results.
+  if (schema_key.context._op == accelerator::INVALID) {
+    for (auto &raw_record : raw_records) {
+      results.emplace_back(rocksdb::PinnableSlice(
+          raw_record.data_, raw_record.size_));
+    }
+    return accelerator::ACC_OK;
+  }
+
+  // If total raw_records size is under 8, just run native filter.
   if (size < 8) {
     return _recordNativeFilter(raw_records, schema_key, results);
   }
@@ -152,6 +162,7 @@ int recordFilter(std::vector<rocksdb::Slice> &raw_records,
         break;
       }
       default:
+        printf("[AVX][recordFilter] INVALID\n");
         return accelerator::ACC_ERR;
     }
     // printf("[AVX][recordIntFilter] Break Point 3-3\n");

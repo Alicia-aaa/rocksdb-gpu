@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <iostream>
 
 #include "accelerator/common.h"
 #include "accelerator/cuda/filter.h"
@@ -206,6 +207,12 @@ class RudaSchema {
     this->field_length_size = schema.field_length.size();
     this->field_skip_size = schema.field_skip.size();
 
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaSchema][populateToCuda] Pre-error before calling" << std::endl;
+      return err;
+    }
+
     cudaMalloc((void **) &data, sizeof(char) * size);
     cudaMalloc((void **) &field_type, sizeof(uint) * field_type_size);
     cudaMalloc((void **) &field_length, sizeof(uint) * field_length_size);
@@ -229,6 +236,11 @@ class RudaSchema {
   }
 
   cudaError_t clear() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaSchema][clear] Pre-error before calling" << std::endl;
+      return err;
+    }
     cudaFree(data);
     cudaFree(field_type);
     cudaFree(field_length);
@@ -263,8 +275,20 @@ void DecodeNFilterSubDataBlocks(// Parameters
                                 RudaKVIndexPair *results);
 
 __device__
+void CachedDecodeNFilterOnSchema(// Parameters
+                                 const char *cached_data,
+                                 const uint64_t cached_data_size,
+                                 const uint64_t block_offset,
+                                 const uint64_t start_idx,
+                                 const uint64_t end_idx,
+                                 RudaSchema *schema,
+                                 // Results
+                                 unsigned long long int *results_idx,
+                                 RudaKVIndexPair *results);
+
+__device__
 void DecodeNFilterOnSchema(// Parameters
-                           const char *cached_data,
+                           const char *non_cached_data,
                            const uint64_t cached_data_size,
                            const uint64_t block_offset,
                            const uint64_t start_idx,
@@ -273,5 +297,4 @@ void DecodeNFilterOnSchema(// Parameters
                            // Results
                            unsigned long long int *results_idx,
                            RudaKVIndexPair *results);
-
 }  // namespace ruda

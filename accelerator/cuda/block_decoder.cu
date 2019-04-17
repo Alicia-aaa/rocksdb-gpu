@@ -193,18 +193,18 @@ void DecodeNFilterSubDataBlocks(// Parameters
 }
 
 __device__
-void DecodeNFilterOnSchema(// Parameters
-                           const char *cached_data,
-                           const uint64_t cached_data_size,
-                           const uint64_t block_offset,
-                           const uint64_t start_idx,
-                           const uint64_t end_idx,
-                           RudaSchema *schema,
-                           // Results
-                           unsigned long long int *results_idx,
-                           ruda::RudaKVIndexPair *results) {
-  const char *subblock = &cached_data[start_idx];
-  const char *limit = &cached_data[end_idx];
+void CachedDecodeNFilterOnSchema(// Parameters
+                                 const char *cached_data,
+                                 const uint64_t cached_data_size,
+                                 const uint64_t block_offset,
+                                 const uint64_t start_idx,
+                                 const uint64_t end_idx,
+                                 RudaSchema *schema,
+                                 // Results
+                                 unsigned long long int *results_idx,
+                                 ruda::RudaKVIndexPair *results) {
+  const char *subblock = cached_data + start_idx;
+  const char *limit = cached_data + end_idx;
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
   size_t key_buf_length = 0;
   char *key_buf = new char[key_buf_size];
@@ -271,6 +271,10 @@ void DecodeNFilterOnSchema(// Parameters
       case accelerator::GREATER_EQ:
         filter_result = decoded_value >= schema->ctx._pivot;
         break;
+      case accelerator::INVALID:
+        // INVALID case, return all data to result.
+        filter_result = true;
+        break;
       default:
         break;
     }
@@ -280,6 +284,105 @@ void DecodeNFilterOnSchema(// Parameters
       results[idx] = RudaKVIndexPair(
           block_offset + value_start,
           block_offset + value_start + value_size);
+    }
+
+    // Next DataKey...
+    subblock = value + value_size;
+  }
+
+  delete[] key_buf;
+}
+
+__device__
+void DecodeNFilterOnSchema(// Parameters
+                           const char *data,
+                           const uint64_t lookup_size,
+                           const uint64_t block_offset,
+                           const uint64_t start_idx,
+                           const uint64_t end_idx,
+                           RudaSchema *schema,
+                           // Results
+                           unsigned long long int *results_idx,
+                           ruda::RudaKVIndexPair *results) {
+  const char *subblock = data + block_offset + start_idx;
+  const char *limit = data + block_offset + end_idx;
+  size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
+  size_t key_buf_length = 0;
+  char *key_buf = new char[key_buf_size];
+  while (subblock < limit) {
+    uint32_t shared, non_shared, value_size;
+    subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
+                             &value_size);
+    const char *key;
+    size_t key_size;
+    if (shared == 0) {
+      key = subblock;
+      key_size = non_shared;
+      if (key_size > key_buf_size) {
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new char[key_buf_size];
+      }
+      memset(key_buf, 0, sizeof(char) * key_buf_size);
+      memcpy(key_buf, key, sizeof(char) * key_size);
+      key_buf_length = key_size;
+    } else {
+      key = subblock;
+      key_size = shared + non_shared;
+      if (key_size > key_buf_size) {
+        char *new_key_buf = new char[key_size];
+        memcpy(new_key_buf, key_buf, sizeof(char) * shared);
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new_key_buf;
+      }
+      memcpy(key_buf + shared, key, sizeof(char) * non_shared);
+      key_buf_length = key_size;
+    }
+
+    const char *value = subblock + non_shared;
+
+    bool is_equal_to_schema = true;
+    for (size_t i = 0; i < NUM_TABLE_BYTES; ++i) {
+      if (key_buf[i] != schema->data[i]) {
+        is_equal_to_schema = false;
+        break;
+      }
+    }
+    if (!is_equal_to_schema) {
+      subblock = value + value_size;
+      continue;
+    }
+
+    long decoded_value = rudaConvertRecord(schema, value);
+    bool filter_result = false;
+    switch (schema->ctx._op) {
+      case accelerator::EQ:
+        filter_result = decoded_value == schema->ctx._pivot;
+        break;
+      case accelerator::LESS:
+        filter_result = decoded_value < schema->ctx._pivot;
+        break;
+      case accelerator::GREATER:
+        filter_result = decoded_value > schema->ctx._pivot;
+        break;
+      case accelerator::LESS_EQ:
+        filter_result = decoded_value <= schema->ctx._pivot;
+        break;
+      case accelerator::GREATER_EQ:
+        filter_result = decoded_value >= schema->ctx._pivot;
+        break;
+      case accelerator::INVALID:
+        // INVALID case, return all data to result.
+        filter_result = true;
+        break;
+      default:
+        break;
+    }
+    if (filter_result) {
+      unsigned long long int idx = atomicAdd(results_idx, 1);
+      size_t value_start = value - data;
+      results[idx] = RudaKVIndexPair(value_start, value_start + value_size);
     }
 
     // Next DataKey...

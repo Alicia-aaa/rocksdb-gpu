@@ -30,7 +30,8 @@ namespace kernel {
 __global__
 void rudaRecordFilterKernel(// Parameters (ReadOnly)
                             size_t offset, size_t kSize,
-                            size_t dataSize, size_t maxCacheSize,
+                            size_t dataSize, bool use_shared_memory,
+                            size_t max_cache_size,
                             char *data, uint64_t *seek_indices,
                             RudaSchema *schema,
                             uint64_t *block_seek_start_indices,
@@ -43,6 +44,9 @@ void rudaRecordFilterKernel(// Parameters (ReadOnly)
 struct RudaRecordBlockContext {
   cudaStream_t stream;
   cudaEvent_t kernel_finish_event;
+
+  // Device Properties
+  const size_t kMaxSharedMemPerBlock = 0;
 
   // Cuda Kernel Parameters
   const size_t kSize = 0;             // Total seek indices count
@@ -77,13 +81,22 @@ struct RudaRecordBlockContext {
   // Log
   size_t total_gpu_used_memory = 0;
 
-  RudaRecordBlockContext(const size_t total_size, const int block_size,
+  RudaRecordBlockContext(// Device Properties
+                         const size_t max_shared_mem_per_block,
+                         // Kernel Parameters
+                         const size_t total_size, const int block_size,
                          const int grid_size, const size_t max_results_count,
                          const int stream_count, const int stream_size,
                          const int grid_size_per_stream)
-      : kSize(total_size), kBlockSize(block_size), kGridSize(grid_size),
+      : kMaxSharedMemPerBlock(max_shared_mem_per_block),
+        kSize(total_size), kBlockSize(block_size), kGridSize(grid_size),
         kMaxResultsCount(max_results_count), kStreamCount(stream_count),
         kStreamSize(stream_size), kGridSizePerStream(grid_size_per_stream) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][constructor] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError(cudaHostAlloc(
       (void **) &gpu_block_seek_starts,
       sizeof(uint64_t) * kGridSizePerStream, cudaHostAllocMapped));
@@ -104,6 +117,11 @@ struct RudaRecordBlockContext {
   }
 
   void cudaMallocGpuBlockSeekStarts() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][cudaMallocGpuBlockSeekStarts] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError(cudaMalloc(
         (void **) &d_gpu_block_seek_starts,
         sizeof(uint64_t) * kGridSizePerStream));
@@ -169,6 +187,11 @@ struct RudaRecordBlockContext {
   void populateToCuda(const std::vector<char> &datablocks,
                       const std::vector<uint64_t> &seek_indices,
                       char *d_datablocks, uint64_t *d_seek_indices) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][populateToCuda] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     populateToCuda_d_results_idx();
     populateToCuda_d_datablocks(datablocks, d_datablocks);
     populateToCuda_d_seek_indices(seek_indices, d_seek_indices);
@@ -209,17 +232,37 @@ struct RudaRecordBlockContext {
                      // Sources
                      char *d_datablocks, uint64_t *d_seek_indices,
                      RudaSchema *d_schema) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][executeKernel] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
+    size_t shared_mem_size =
+        kMaxSharedMemPerBlock > kMaxCacheSize ? kMaxCacheSize : 0;
+    std::cout << "shared_mem_size: " << shared_mem_size << std::endl;
     kernel::rudaRecordFilterKernel<<<kGridSizePerStream,
-                                     kBlockSize,
-                                     kMaxCacheSize,
-                                     stream>>>(
-      seek_start_offset, kSize, kTotalDataSize, kMaxCacheSize,
+                                    kBlockSize,
+                                    shared_mem_size,
+                                    stream>>>(
+      seek_start_offset, kSize, kTotalDataSize,
+      shared_mem_size != 0 /* use_shared_memory */,
+      kMaxCacheSize,
       d_datablocks, d_seek_indices, d_schema, d_gpu_block_seek_starts,
       d_results_idx, d_results
     );
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][executeKernel] Post-error after calling" << std::endl;
+      cudaCheckError(err);
+    }
   }
 
   void copyFromCuda() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][copyFromCuda] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError(cudaMemcpyAsync(
         h_results_count, d_results_idx, sizeof(unsigned long long int),
         cudaMemcpyDeviceToHost, stream));
@@ -230,20 +273,40 @@ struct RudaRecordBlockContext {
   }
 
   void freeCudaObjects() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][freeCudaObjects] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError( cudaFree(d_gpu_block_seek_starts) );
     cudaCheckError( cudaFree(d_results_idx) );
     cudaCheckError( cudaFree(d_results) );
   }
 
   void initializeStream() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][initializeStream] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError( cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) );
   }
 
   void destroyStream() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][destroyStream] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError( cudaStreamDestroy(stream) );
   }
 
   void clear() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockContext][clear] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     freeCudaObjects();
     destroyStream();
     cudaCheckError( cudaEventDestroy(kernel_finish_event) );
@@ -254,6 +317,9 @@ struct RudaRecordBlockContext {
 };
 
 struct RudaRecordBlockManager {
+  // Device Properties
+  size_t kMaxSharedMemPerBlock = 0;
+
   // Cuda Kernel Parameters
   // IMPORTANT: Kernel Parameters never be changed except in constructor.
   size_t kSize = 0;             // Total seek indices count
@@ -280,11 +346,13 @@ struct RudaRecordBlockManager {
 
   RudaRecordBlockManager(const size_t total_size, const int block_size,
                          const size_t stream_count,
-                         const size_t max_results_count) {
+                         const size_t max_results_count,
+                         const size_t max_shared_mem_per_block) {
     kSize = total_size;
     kBlockSize = block_size;
     kStreamCount = stream_count;
     kMaxResultsCount = max_results_count;
+    kMaxSharedMemPerBlock = max_shared_mem_per_block;
     size_t threads_per_stream = ceil((float) total_size / (float) stream_count);
     while (threads_per_stream <= kBlockSize && kBlockSize != 4) {
       kBlockSize = kBlockSize >> 1;
@@ -315,6 +383,9 @@ struct RudaRecordBlockManager {
         stream_size = kApproxStreamSize;
       }
       stream_ctxs.emplace_back(
+          // Device Properties
+          kMaxSharedMemPerBlock,
+          // Kernel Parameters
           kSize, kBlockSize, kGridSize, kMaxResultsCount, kStreamCount,
           stream_size, grid_size_per_stream);
     }
@@ -323,6 +394,11 @@ struct RudaRecordBlockManager {
   void registerPinnedMemory(std::vector<char> &datablocks,
                             std::vector<uint64_t> &seek_indices,
                             rocksdb::SlicewithSchema &schema) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][registerPinnedMemory] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError(cudaHostRegister(
         &datablocks[0], sizeof(char) * datablocks.size(), cudaHostAllocMapped));
     cudaCheckError(cudaHostRegister(
@@ -335,6 +411,11 @@ struct RudaRecordBlockManager {
   void unregisterPinnedMemory(std::vector<char> &datablocks,
                               std::vector<uint64_t> &seek_indices,
                               rocksdb::SlicewithSchema &schema) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][unregisterPinnedMemory] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError( cudaHostUnregister(&datablocks[0]) );
     cudaCheckError( cudaHostUnregister(&seek_indices[0]) );
     cudaCheckError( cudaHostUnregister(&schema) );
@@ -371,6 +452,12 @@ struct RudaRecordBlockManager {
   void populateToCuda(const std::vector<char> &datablocks,
                       const std::vector<uint64_t> &seek_indices,
                       const rocksdb::SlicewithSchema &schema) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][populateToCuda] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
+
     // Allocation Part
     // Cuda Parameters
     cudaCheckError(cudaMalloc(
@@ -404,7 +491,14 @@ struct RudaRecordBlockManager {
   }
 
   void executeKernels(size_t kTotalDataSize) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][executeKernels] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
+    int counter = 0;
     for (auto &ctx : stream_ctxs) {
+      std::cout << "ExecuteKernel Stream Context " << ++counter << std::endl;
       ctx.executeKernel(
           // Parameters
           kTotalDataSize,
@@ -414,6 +508,11 @@ struct RudaRecordBlockManager {
   }
 
   void copyFromCuda() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][copyFromCuda] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     for (auto &ctx : stream_ctxs) {
       ctx.copyFromCuda();
     }
@@ -434,6 +533,11 @@ struct RudaRecordBlockManager {
 
   void translatePairsToSlices(std::vector<char> &datablocks,
                               std::vector<rocksdb::PinnableSlice> &values) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][translatePairsToSlices] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     std::chrono::high_resolution_clock::time_point begin, end;
 
     begin = std::chrono::high_resolution_clock::now();
@@ -507,6 +611,11 @@ struct RudaRecordBlockManager {
   }
 
   void clear() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaRecordBlockManager][clear] Pre-error before calling" << std::endl;
+      cudaCheckError(err);
+    }
     cudaCheckError( cudaFree(d_datablocks) );
     cudaCheckError( cudaFree(d_seek_indices) );
     cudaCheckError( h_schema.clear() );
@@ -521,7 +630,8 @@ struct RudaRecordBlockManager {
 __global__
 void kernel::rudaRecordFilterKernel(// Parameters (ReadOnly)
                                     size_t offset, size_t kSize,
-                                    size_t dataSize, size_t maxCacheSize,
+                                    size_t dataSize, bool use_shared_memory,
+                                    size_t max_cache_size,
                                     char *data, uint64_t *seek_indices,
                                     RudaSchema *schema,
                                     uint64_t *block_seek_start_indices,
@@ -536,10 +646,7 @@ void kernel::rudaRecordFilterKernel(// Parameters (ReadOnly)
     return;
   }
 
-  // Shared variables.
-  // Caches data used from threads in single block.
-  extern __shared__ char cached_data[];
-
+  // Calculates datablock boundary on thread.
   uint64_t block_seek_start_index = block_seek_start_indices[blockIdx.x];
   uint64_t start = seek_indices[i] - block_seek_start_index;
   uint64_t end = 0;
@@ -550,21 +657,35 @@ void kernel::rudaRecordFilterKernel(// Parameters (ReadOnly)
     // 'end' must be next seek index.
     end = seek_indices[i + 1] - block_seek_start_index;
   }
+  size_t size = end - start;
 
-  for (size_t j = start; j < end; ++j) {
-    size_t data_idx = block_seek_start_index + j;
-    if (data_idx >= dataSize || j >= maxCacheSize) {
-      break;
+  if (use_shared_memory) {
+    // Shared variables.
+    // Caches data used from threads in single block.
+    extern __shared__ char cached_data[];
+
+    for (size_t j = start; j < end; ++j) {
+      size_t data_idx = block_seek_start_index + j;
+      if (data_idx >= dataSize || j >= max_cache_size) {
+        break;
+      }
+      cached_data[j] = data[data_idx];
     }
-    cached_data[j] = data[data_idx];
+
+    __syncthreads();
+
+    CachedDecodeNFilterOnSchema(
+        // Parameters
+        cached_data, size, block_seek_start_index, start, end, schema,
+        // Results
+        results_idx, results);
+    return;
   }
 
-  __syncthreads();
-
-  size_t size = end - start;
+  // Non-shared memory.
   DecodeNFilterOnSchema(
       // Parameters
-      cached_data, size, block_seek_start_index, start, end, schema,
+      data, size, block_seek_start_index, start, end, schema,
       // Results
       results_idx, results);
 }
@@ -588,14 +709,21 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
   cudaCheckError(cudaMalloc(&warming_up, 0));
   cudaCheckError(cudaFree(warming_up));
 
+  // TODO(totoro): Using shared memory by calculating gpu device props...
+  int deviceId;
+  cudaCheckError( cudaGetDevice(&deviceId) );
+  cudaDeviceProp prop;
+  cudaCheckError( cudaGetDeviceProperties(&prop, deviceId) );
+
   // Cuda can't use const variable. So we copy SlicewithSchema. (Shallow copy)
   rocksdb::SlicewithSchema* copied_schema = schema.clone();
 
   RudaRecordBlockManager block_mgr(
       seek_indices.size() /* kSize */,
       64 /* kBlockSize */,
-      4,
-      max_results_count);
+      4 /* Number of streams */,
+      max_results_count,
+      prop.sharedMemPerBlock);
 
   // Copy & Initializes variables from host to device.
   block_mgr.initParams(datablocks, seek_indices);

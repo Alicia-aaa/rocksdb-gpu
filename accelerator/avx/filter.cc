@@ -7,18 +7,41 @@
 
 namespace avx {
 
+int _simpleIntNativeFilter(std::vector<long> &source,
+                           accelerator::FilterContext ctx,
+                           std::vector<long> &results) {
+  if (!ctx.isValidOp()) {
+    return accelerator::ACC_ERR;
+  }
+
+  for (size_t i = 0; i < source.size(); ++i) {
+    results[i] = ctx(source[i]);
+  }
+  return accelerator::ACC_OK;
+}
+
 int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
                     std::vector<long> &results) {
   results.resize(source.size());
   uint64_t pivot = static_cast<uint64_t>(ctx._pivot);
   int size = (int) source.size();
-  // Round up size to next multiple of 8
-  int roundedSize = (size + 7) & ~7UL;
+
+  // If total source size is under 8, just run native filter.
+  if (size < 8) {
+    return _simpleIntNativeFilter(source, ctx, results);
+  }
+
+  // Round up size to lower multiple of 8
+  int rounded_size = (size / 8) * 8;
+  int remain_size = size % 8;
+
+  printf("[AVX][simpleIntFilter] Origin: %d, Round: %d, Remain: %d\n",
+      size, rounded_size, remain_size);
 
   __m256i pivots = _mm256_set_epi32(
       pivot, pivot, pivot, pivot, pivot, pivot, pivot, pivot);
   __m256i mask = _mm256_cmpeq_epi32(pivots, pivots);  // 0xffffffff mask
-  for (int i = 0; i < roundedSize; i += 8) {
+  for (int i = 0; i < rounded_size; i += 8) {
     __m256i sources = _mm256_set_epi32(
         source[i], source[i+1], source[i+2], source[i+3], source[i+4],
         source[i+5], source[i+6], source[i+7]);
@@ -65,6 +88,12 @@ int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
       }
       compare_mask = compare_mask >> 4;
     }
+  }
+
+  // Process remain data by native loop...
+  for (int i = 0; i < remain_size; ++i) {
+    int idx = rounded_size + i;
+    results[i] = ctx(source[idx]);
   }
 
   return accelerator::ACC_OK;

@@ -169,8 +169,7 @@ class RudaKVIndexPair {
  public:
   __host__ __device__
   RudaKVIndexPair()
-      : key_index_(RudaIndexEntry()), shared_key_index_(RudaIndexEntry()),
-        value_index_(RudaIndexEntry()) {}
+      : key_index_(RudaIndexEntry()), value_index_(RudaIndexEntry()) {}
 
   __host__ __device__
   RudaKVIndexPair(size_t key_start, size_t key_end, size_t value_start,
@@ -182,17 +181,30 @@ class RudaKVIndexPair {
   RudaKVIndexPair(size_t value_start, size_t value_end)
       : value_index_(RudaIndexEntry(value_start, value_end)) {}
 
-  __host__ __device__
-  RudaKVIndexPair(size_t key_start, size_t key_end,
-                  size_t shared_key_start, size_t shared_key_end,
-                  size_t value_start, size_t value_end)
-      : key_index_(RudaIndexEntry(key_start, key_end)),
-        shared_key_index_(RudaIndexEntry(shared_key_start, shared_key_end)),
-        value_index_(RudaIndexEntry(value_start, value_end)) {}
+  __device__
+  void pinKeyBuf(char *key_buf, size_t key_buf_size) {
+    if (dh_key != nullptr) {
+      delete[] dh_key;
+    }
+    dh_key = new char[key_buf_size];
+    key_size = key_buf_size;
+
+    memcpy(dh_key, key_buf, sizeof(char) * key_buf_size);
+  }
+
+  __device__
+  void releaseKeyBuf() {
+    if (dh_key != nullptr) {
+      delete[] dh_key;
+    }
+  }
 
   RudaIndexEntry key_index_;
-  RudaIndexEntry shared_key_index_;
   RudaIndexEntry value_index_;
+
+  // Store key in cuda device heap memory
+  char *dh_key = nullptr;
+  size_t key_size;
 };
 
 // GPU-accessable Schema

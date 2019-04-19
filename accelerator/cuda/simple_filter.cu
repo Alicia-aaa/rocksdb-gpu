@@ -36,7 +36,7 @@ struct RudaIntFunctor {
   }
 
   __host__ __device__
-  int operator()(const int target) const {
+  int operator()(const long target) const {
     switch (this->_context._op) {
       case accelerator::EQ:
         return target == this->_context._pivot ? 1 : 0;
@@ -79,9 +79,21 @@ void kernel::rudaIntFilterKernel(accelerator::FilterContext *context, int *value
   }
 }
 
-int sstThrustFilter(const std::vector<int> &values,
+int gpuWarmingUp() {
+  // Warming up
+  // Note(totoro): Because, there is a warming up latency on gpu when
+  // gpu-related function called(ex. set up gpu driver). So, we ignore this
+  // latency by just firing meaningless malloc function.
+  void *warming_up;
+  cudaCheckError(cudaMalloc(&warming_up, 0));
+  cudaCheckError(cudaFree(warming_up));
+
+  return accelerator::ACC_OK;
+}
+
+int sstThrustFilter(const std::vector<long> &values,
                     const accelerator::FilterContext context,
-                    std::vector<int> &results) {
+                    std::vector<long> &results) {
   // std::cout << "[RUDA][sstThrustFilter] Start" << std::endl;
   results.resize(values.size());
 
@@ -94,8 +106,8 @@ int sstThrustFilter(const std::vector<int> &values,
   // std::cout << "[sstThrustFilter] Inputs - context: " << context.toString()
   // << std::endl;
 
-  thrust::device_vector<int> d_values(values);
-  thrust::device_vector<int> d_results(values.size());
+  thrust::device_vector<long> d_values(values);
+  thrust::device_vector<long> d_results(values.size());
 
   RudaIntFunctor rudaFunc(context);
   thrust::transform(d_values.begin(), d_values.end(), d_results.begin(),

@@ -131,6 +131,9 @@ void DecodeNFilterSubDataBlocks(// Parameters
                                 ruda::RudaKVIndexPair *results) {
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
+  size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
+  size_t key_buf_length = 0;
+  char *key_buf = new char[key_buf_size];
   while (subblock < limit) {
     uint32_t shared, non_shared, value_size;
     subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
@@ -140,10 +143,26 @@ void DecodeNFilterSubDataBlocks(// Parameters
     if (shared == 0) {
       key = subblock;
       key_size = non_shared;
+      if (key_size > key_buf_size) {
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new char[key_buf_size];
+      }
+      memset(key_buf, 0, sizeof(char) * key_buf_size);
+      memcpy(key_buf, key, sizeof(char) * key_size);
+      key_buf_length = key_size;
     } else {
-      // TODO(totoro): We need to consider 'shared' data within subblock.
       key = subblock;
       key_size = shared + non_shared;
+      if (key_size > key_buf_size) {
+        char *new_key_buf = new char[key_size];
+        memcpy(new_key_buf, key_buf, sizeof(char) * shared);
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new_key_buf;
+      }
+      memcpy(key_buf + shared, key, sizeof(char) * non_shared);
+      key_buf_length = key_size;
     }
 
     const char *value = subblock + non_shared;
@@ -177,19 +196,16 @@ void DecodeNFilterSubDataBlocks(// Parameters
           block_offset + key_start + key_size,
           block_offset + value_start,
           block_offset + value_start + value_size);
+      // if (shared != 0) {
+      //   results[idx].pinKeyBuf(key_buf, key_buf_length);
+      // }
     }
-
-    // Heap Version
-    // char *results_key = new char[key_size];
-    // char *results_value = new char[value_size];
-    // memcpy(results_key, key, key_size);
-    // memcpy(results_value, value, value_size);
-    // results_keys[idx] = RudaSlice(results_key, key_size);
-    // results_values[idx] = RudaSlice(results_value, value_size);
 
     // Next DataKey...
     subblock = value + value_size;
   }
+
+  delete[] key_buf;
 }
 
 __device__

@@ -7,18 +7,41 @@
 
 namespace avx {
 
+int _simpleIntNativeFilter(std::vector<long> &source,
+                           accelerator::FilterContext ctx,
+                           std::vector<long> &results) {
+  if (!ctx.isValidOp()) {
+    return accelerator::ACC_ERR;
+  }
+
+  for (size_t i = 0; i < source.size(); ++i) {
+    results[i] = ctx(source[i]);
+  }
+  return accelerator::ACC_OK;
+}
+
 int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
                     std::vector<long> &results) {
   results.resize(source.size());
   uint64_t pivot = static_cast<uint64_t>(ctx._pivot);
   int size = (int) source.size();
-  // Round up size to next multiple of 8
-  int roundedSize = (size + 7) & ~7UL;
+
+  // If total source size is under 8, just run native filter.
+  if (size < 8) {
+    return _simpleIntNativeFilter(source, ctx, results);
+  }
+
+  // Round up size to lower multiple of 8
+  int rounded_size = (size / 8) * 8;
+  int remain_size = size % 8;
+
+  printf("[AVX][simpleIntFilter] Origin: %d, Round: %d, Remain: %d\n",
+      size, rounded_size, remain_size);
 
   __m256i pivots = _mm256_set_epi32(
       pivot, pivot, pivot, pivot, pivot, pivot, pivot, pivot);
   __m256i mask = _mm256_cmpeq_epi32(pivots, pivots);  // 0xffffffff mask
-  for (int i = 0; i < roundedSize; i += 8) {
+  for (int i = 0; i < rounded_size; i += 8) {
     __m256i sources = _mm256_set_epi32(
         source[i], source[i+1], source[i+2], source[i+3], source[i+4],
         source[i+5], source[i+6], source[i+7]);
@@ -67,6 +90,12 @@ int simpleIntFilter(std::vector<long> &source, accelerator::FilterContext ctx,
     }
   }
 
+  // Process remain data by native loop...
+  for (int i = 0; i < remain_size; ++i) {
+    int idx = rounded_size + i;
+    results[i] = ctx(source[idx]);
+  }
+
   return accelerator::ACC_OK;
 }
 
@@ -88,12 +117,22 @@ int _recordNativeFilter(std::vector<rocksdb::Slice> &raw_records,
 }
 
 int recordFilter(std::vector<rocksdb::Slice> &raw_records,
-                    const rocksdb::SlicewithSchema &schema_key,
-                    std::vector<rocksdb::PinnableSlice> &results) {
+                 const rocksdb::SlicewithSchema &schema_key,
+                 std::vector<rocksdb::PinnableSlice> &results) {
   // printf("[AVX][recordIntFilter] START raw_record_size: %lu\n", raw_records.size());
   uint64_t pivot = static_cast<uint64_t>(schema_key.context._pivot);
   int size = (int) raw_records.size();
 
+  // If operator is INVALID, put all records to results.
+  if (schema_key.context._op == accelerator::INVALID) {
+    for (auto &raw_record : raw_records) {
+      results.emplace_back(rocksdb::PinnableSlice(
+          raw_record.data_, raw_record.size_));
+    }
+    return accelerator::ACC_OK;
+  }
+
+  // If total raw_records size is under 8, just run native filter.
   if (size < 8) {
     return _recordNativeFilter(raw_records, schema_key, results);
   }
@@ -152,6 +191,7 @@ int recordFilter(std::vector<rocksdb::Slice> &raw_records,
         break;
       }
       default:
+        printf("[AVX][recordFilter] INVALID\n");
         return accelerator::ACC_ERR;
     }
     // printf("[AVX][recordIntFilter] Break Point 3-3\n");

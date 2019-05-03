@@ -1120,6 +1120,9 @@ clean:
 	rm -rf bzip2* snappy* zlib* lz4* zstd*
 	cd java; $(MAKE) clean
 
+clean_testfiles:
+	rm sst_testfile_*
+
 tags:
 	ctags -R .
 	cscope -b `$(FIND) . -name '*.cc'` `$(FIND) . -name '*.h'` `$(FIND) . -name '*.c'` \

@@ -77,3 +77,4 @@ buckifier/*.pyc
 
 .vscode/
 sst_testfile_*
+*.csv

@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <iostream>
 
 #include "accelerator/common.h"
 #include "rocksdb/slice.h"
@@ -167,8 +168,7 @@ class RudaKVIndexPair {
  public:
   __host__ __device__
   RudaKVIndexPair()
-      : key_index_(RudaIndexEntry()), shared_key_index_(RudaIndexEntry()),
-        value_index_(RudaIndexEntry()) {}
+      : key_index_(RudaIndexEntry()), value_index_(RudaIndexEntry()) {}
 
   __host__ __device__
   RudaKVIndexPair(size_t key_start, size_t key_end, size_t value_start,
@@ -180,17 +180,30 @@ class RudaKVIndexPair {
   RudaKVIndexPair(size_t value_start, size_t value_end)
       : value_index_(RudaIndexEntry(value_start, value_end)) {}
 
-  __host__ __device__
-  RudaKVIndexPair(size_t key_start, size_t key_end,
-                  size_t shared_key_start, size_t shared_key_end,
-                  size_t value_start, size_t value_end)
-      : key_index_(RudaIndexEntry(key_start, key_end)),
-        shared_key_index_(RudaIndexEntry(shared_key_start, shared_key_end)),
-        value_index_(RudaIndexEntry(value_start, value_end)) {}
+  __device__
+  void pinKeyBuf(char *key_buf, size_t key_buf_size) {
+    if (dh_key != nullptr) {
+      delete[] dh_key;
+    }
+    dh_key = new char[key_buf_size];
+    key_size = key_buf_size;
+
+    memcpy(dh_key, key_buf, sizeof(char) * key_buf_size);
+  }
+
+  __device__
+  void releaseKeyBuf() {
+    if (dh_key != nullptr) {
+      delete[] dh_key;
+    }
+  }
 
   RudaIndexEntry key_index_;
-  RudaIndexEntry shared_key_index_;
   RudaIndexEntry value_index_;
+
+  // Store key in cuda device heap memory
+  char *dh_key = nullptr;
+  size_t key_size;
 };
 
 // GPU-accessable Schema
@@ -204,6 +217,12 @@ class RudaSchema {
     this->field_type_size = schema.field_type.size();
     this->field_length_size = schema.field_length.size();
     this->field_skip_size = schema.field_skip.size();
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaSchema][populateToCuda] Pre-error before calling" << std::endl;
+      return err;
+    }
 
     cudaMalloc((void **) &data, sizeof(char) * size);
     cudaMalloc((void **) &field_type, sizeof(uint) * field_type_size);
@@ -228,6 +247,11 @@ class RudaSchema {
   }
 
   cudaError_t clear() {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      std::cout << "[ERROR][RudaSchema][clear] Pre-error before calling" << std::endl;
+      return err;
+    }
     cudaFree(data);
     cudaFree(field_type);
     cudaFree(field_length);
@@ -262,8 +286,20 @@ void DecodeNFilterSubDataBlocks(// Parameters
                                 RudaKVIndexPair *results);
 
 __device__
+void CachedDecodeNFilterOnSchema(// Parameters
+                                 const char *cached_data,
+                                 const uint64_t cached_data_size,
+                                 const uint64_t block_offset,
+                                 const uint64_t start_idx,
+                                 const uint64_t end_idx,
+                                 RudaSchema *schema,
+                                 // Results
+                                 unsigned long long int *results_idx,
+                                 RudaKVIndexPair *results);
+
+__device__
 void DecodeNFilterOnSchema(// Parameters
-                           const char *cached_data,
+                           const char *non_cached_data,
                            const uint64_t cached_data_size,
                            const uint64_t block_offset,
                            const uint64_t start_idx,
@@ -272,5 +308,4 @@ void DecodeNFilterOnSchema(// Parameters
                            // Results
                            unsigned long long int *results_idx,
                            RudaKVIndexPair *results);
-
 }  // namespace ruda

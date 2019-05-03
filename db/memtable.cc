@@ -998,10 +998,10 @@ bool MemTable::ValueFilter(const LookupKey& key,
     *seq = saver.seq;
   }
   printf("ValueFilter in memory Called End\n");
-  std::vector<PinnableSlice>::iterator iter;
-  for(iter=value.begin(); iter != value.end(); iter++) {
-	  std::cout << "end " << (*iter).ToString(1) << std::endl;
-  }
+  // std::vector<PinnableSlice>::iterator iter;
+  // for(iter=value.begin(); iter != value.end(); iter++) {
+	//   std::cout << "end " << (*iter).ToString(1) << std::endl;
+  // }
 
 
   // No change to value, since we have not yet found a Put/Delete

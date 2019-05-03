@@ -18,15 +18,17 @@
 
 namespace ruda {
 
+int gpuWarmingUp();
+
 // Note: Not Implemented.
 int sstChunkFilter(const char *values,
                    const accelerator::FilterContext context,
                    char *results);
 
 // Simple Filter
-int sstThrustFilter(const std::vector<int> &values,
+int sstThrustFilter(const std::vector<long> &values,
                     const accelerator::FilterContext context,
-                    std::vector<int> &results);
+                    std::vector<long> &results);
 
 int sstIntNativeFilter(const std::vector<int> &values,
                        const accelerator::FilterContext context,

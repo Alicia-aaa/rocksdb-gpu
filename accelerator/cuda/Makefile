@@ -16,6 +16,7 @@ NVCCFLAGS = -dc -arch=${ARCHITECTURE} --default-stream per-thread \
 CUDA_SOURCES = \
 	block_decoder.cu \
 	block_filter.cu \
+	async_record_filter.cu \
 	block_record_filter.cu \
 	block_stream_filter.cu \
 	block_stream_filter_v2.cu \

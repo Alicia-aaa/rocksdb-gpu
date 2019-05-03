@@ -102,8 +102,8 @@ int recordFilter(std::vector<rocksdb::Slice> &raw_records,
   int rounded_size = (size / 8) * 8;
   int remain_size = size % 8;
 
-  printf("[AVX][recordIntFilter] Origin: %d, Round: %d, Remain: %d\n",
-      size, rounded_size, remain_size);
+//  printf("[AVX][recordIntFilter] Origin: %d, Round: %d, Remain: %d\n",
+//      size, rounded_size, remain_size);
 
   // printf("[AVX][recordIntFilter] Break Point 1\n");
   __m256i pivots = _mm256_set_epi32(

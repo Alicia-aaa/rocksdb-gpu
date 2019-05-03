@@ -62,7 +62,6 @@ class MergeContext;
 class ColumnFamilySet;
 class TableCache;
 class MergeIteratorBuilder;
-class FilePicker;
 
 // Return the smallest index i such that file_level.files[i]->largest >= key.
 // Return file_level.num_files if there is no such file.
@@ -89,6 +88,63 @@ extern bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
 extern void DoGenerateLevelFilesBrief(LevelFilesBrief* file_level,
                                       const std::vector<FileMetaData*>& files,
                                       Arena* arena);
+
+class FilePicker {
+ public:
+  FilePicker(std::vector<FileMetaData*>* files, const Slice& user_key,
+             const Slice& ikey, autovector<LevelFilesBrief>* file_levels,
+             unsigned int num_levels, FileIndexer* file_indexer,
+             const Comparator* user_comparator,
+             const InternalKeyComparator* internal_comparator);
+
+  int GetCurrentLevel() const { return curr_level_; }
+
+  FdWithKeyRange* GetNextFile();
+
+  FdWithKeyRange* GetNextFileWithTable();
+
+  // getter for current file level
+  // for GET_HIT_L0, GET_HIT_L1 & GET_HIT_L2_AND_UP counts
+  unsigned int GetHitFileLevel() { return hit_file_level_; }
+
+  // Returns true if the most recent "hit file" (i.e., one returned by
+  // GetNextFile()) is at the last index in its level.
+  bool IsHitFileLastInLevel() { return is_hit_file_last_in_level_; }
+
+  const InternalKeyComparator * GetInternalComparator() { return internal_comparator_; }
+
+  const Slice GetInternalKey() { return ikey_; }
+  const Slice GetUserKey() { return user_key_; }
+
+ private:
+  unsigned int num_levels_;
+  unsigned int curr_level_;
+  unsigned int returned_file_level_;
+  unsigned int hit_file_level_;
+  int32_t search_left_bound_;
+  int32_t search_right_bound_;
+#ifndef NDEBUG
+  std::vector<FileMetaData*>* files_;
+#endif
+  autovector<LevelFilesBrief>* level_files_brief_;
+  bool search_ended_;
+  bool is_hit_file_last_in_level_;
+  LevelFilesBrief* curr_file_level_;
+  unsigned int curr_index_in_curr_level_;
+  unsigned int start_index_in_curr_level_;
+  Slice user_key_;
+  Slice ikey_;
+  FileIndexer* file_indexer_;
+  const Comparator* user_comparator_;
+  const InternalKeyComparator* internal_comparator_;
+#ifndef NDEBUG
+  FdWithKeyRange* prev_file_;
+#endif
+
+  // Setup local variables to search next level.
+  // Returns false if there are no more levels to search.
+  bool PrepareNextLevel();
+};
 
 class VersionStorageInfo {
  public:

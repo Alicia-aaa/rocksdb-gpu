@@ -31,6 +31,7 @@ class DB;
 class ReadCallback;
 struct ReadOptions;
 struct DBOptions;
+class GPUManager;
 
 enum WriteType {
   kPutRecord,

@@ -10,8 +10,8 @@ BASH_EXISTS := $(shell which bash)
 SHELL := $(shell which bash)
 
 CLEAN_FILES = # deliberately empty, so we can append below.
-CFLAGS += ${EXTRA_CFLAGS}
-CXXFLAGS += ${EXTRA_CXXFLAGS}
+CFLAGS += ${EXTRA_CFLAGS} -I /usr/local/cuda/include
+CXXFLAGS += ${EXTRA_CXXFLAGS} -I /usr/local/cuda/include
 LDFLAGS += $(EXTRA_LDFLAGS)
 MACHINE ?= $(shell uname -m)
 ARFLAGS = ${EXTRA_ARFLAGS} rs

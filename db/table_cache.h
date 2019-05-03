@@ -23,6 +23,8 @@
 #include "rocksdb/options.h"
 #include "rocksdb/table.h"
 #include "table/table_reader.h"
+//#include "accelerator/common.h"
+#include "accelerator/cuda/async_manager.h"
 
 namespace rocksdb {
 
@@ -108,13 +110,13 @@ class TableCache {
 
   Status AsyncFilter(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,
-                     const Slice& k, const SlicewithSchema& schema_k,
+                     int join_idx,
                      GetContext* get_context,
                      const SliceTransform* prefix_extractor,
-                     FdWithKeyRange * fds,
-                     HistogramImpl * fd_read_hists,
-                     bool fd_skip_filters,
-                     int fd_levels);
+                     FdWithKeyRange * fd,
+                     HistogramImpl * fd_read_hist,
+                     bool fd_skip_filter,
+                     int fd_level, ruda::RudaAsyncManager * async_manager);
 
   // Evict any entry for the specified file number
   static void Evict(Cache* cache, uint64_t file_number);

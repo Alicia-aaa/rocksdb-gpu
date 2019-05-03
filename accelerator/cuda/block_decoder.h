@@ -12,7 +12,6 @@
 #include <cstddef>
 
 #include "accelerator/common.h"
-#include "accelerator/cuda/filter.h"
 #include "rocksdb/slice.h"
 
 const int kMaxRudaSliceDataSize = 64;

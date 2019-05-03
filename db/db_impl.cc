@@ -96,6 +96,7 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
+#include "accelerator/gpu_manager.h"
 
 namespace rocksdb {
 const std::string kDefaultColumnFamilyName("default");
@@ -1220,7 +1221,7 @@ Status DBImpl::ValueFilter(const ReadOptions& read_options,
 
 Status DBImpl::AsyncFilter(ColumnFamilyHandle* column_family,
                            rocksdb::GPUManager *gpu_manager_) {
-  return AsyncFilterImpl(column_family, gpu_manger_);
+  return AsyncFilterImpl(column_family, gpu_manager_);
 }
 
 Status DBImpl::GetImpl(const ReadOptions& read_options,
@@ -1434,7 +1435,6 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   PERF_TIMER_GUARD(get_from_output_files_time);
   if (read_options.value_filter_mode == accelerator::ValueFilterMode::AVX_BLOCK) {
-    std::cout << " ValueFilterblock called " << std::endl;
     sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
                                   &merge_context, &max_covering_tombstone_seq,
                                   join_idx, value_found, nullptr, nullptr,

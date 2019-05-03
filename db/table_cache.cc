@@ -16,7 +16,7 @@
 #include "db/version_edit.h"
 #include "util/filename.h"
 
-#include "accelerator/common.h"
+//#include "accelerator/common.h"
 #include "accelerator/cuda/filter.h"
 #include "monitoring/perf_context_imp.h"
 #include "rocksdb/statistics.h"
@@ -29,6 +29,7 @@
 #include "util/file_reader_writer.h"
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
+#include "accelerator/cuda/async_manager.h"
 
 namespace rocksdb {
 
@@ -558,11 +559,12 @@ Status _ValueFilterGPU(const ReadOptions& options,
 }
 
 Status _AsyncFilterGPU(const ReadOptions& options,
-                       const Slice& k, const SlicewithSchema& schema_k,
+                       int join_idx,
                        GetContext* get_context,
                        TableReader * reader,
-                       bool reader_skip_filter,
-                       const SliceTransform *prefix_extractor) {
+                       bool /*reader_skip_filter*/,
+                       const SliceTransform */*prefix_extractor*/,
+                       ruda::RudaAsyncManager * async_manager) {
 
   // Collect datablocks & seek_indices from SST files.
   std::vector<char> datablocks;
@@ -580,9 +582,9 @@ Status _AsyncFilterGPU(const ReadOptions& options,
       << seek_indices.size()
       << std::endl;
 
-  int err = ruda::recordBlockFilter(
-      datablocks, seek_indices, schema_k, total_entries,
-      *get_context->val_ptr());
+  int err = ruda::recordAsyncFilter(
+      datablocks, seek_indices, join_idx, total_entries,
+      *get_context->val_ptr(), async_manager);
   if (err == accelerator::ACC_ERR) {
     return Status::Aborted();
   }
@@ -632,7 +634,7 @@ Status TableCache::ValueFilter(const ReadOptions& options,
 
   switch (options.value_filter_mode) {
     case accelerator::ValueFilterMode::AVX:
-      std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
+      //std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
       s = _ValueFilterAVX(
           options, k, schema_k, get_context, readers, reader_skip_filters,
           prefix_extractor);
@@ -686,7 +688,7 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
 
   switch (options.value_filter_mode) {
     case accelerator::ValueFilterMode::AVX_BLOCK:
-      std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
+      //std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
       s = _ValueFilterAVXBlock(
           options, k, schema_k, get_context, t, fd_skip_filter,
           prefix_extractor);
@@ -715,13 +717,13 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
 
 Status TableCache::AsyncFilter(const ReadOptions& options,
                                const InternalKeyComparator& internal_comparator,
-                               const Slice& k, const SlicewithSchema& schema_k,
+                               int join_idx,
                                GetContext* get_context,
                                const SliceTransform* prefix_extractor,
                                FdWithKeyRange * fds,
                                HistogramImpl * fd_read_hist,
                                bool fd_skip_filter,
-                               int fd_level) {
+                               int fd_level, ruda::RudaAsyncManager * async_manager) {
   Status s;
   auto &fd = fds->file_metadata->fd;
 
@@ -739,8 +741,8 @@ Status TableCache::AsyncFilter(const ReadOptions& options,
   }
 
   s =  _AsyncFilterGPU(
-           options, k, schema_k, get_context, t, fd_skip_filter,
-           prefix_extractor);
+           options, join_idx, get_context, t, fd_skip_filter,
+           prefix_extractor, async_manager);
 
   if (handle != nullptr) {
     ReleaseHandle(handle);

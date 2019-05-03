@@ -25,6 +25,7 @@
 #include <iostream>
 
 #include "accelerator/common.h"
+#include "accelerator/gpu_manager.h"
 #include "db/compaction.h"
 #include "db/internal_stats.h"
 #include "db/log_reader.h"
@@ -48,7 +49,6 @@
 #include "table/plain_table_factory.h"
 #include "table/table_reader.h"
 #include "table/two_level_iterator.h"
-#include <rocksdb/accelerator/gpu_manager.h>
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
@@ -108,9 +108,7 @@ Status OverlapWithIterator(const Comparator* ucmp,
 // levels. Therefore we are guaranteed that if we find data
 // in a smaller level, later levels are irrelevant (unless we
 // are MergeInProgress).
-class FilePicker {
- public:
-  FilePicker(std::vector<FileMetaData*>* files, const Slice& user_key,
+FilePicker::FilePicker(std::vector<FileMetaData*>* files, const Slice& user_key,
              const Slice& ikey, autovector<LevelFilesBrief>* file_levels,
              unsigned int num_levels, FileIndexer* file_indexer,
              const Comparator* user_comparator,
@@ -148,9 +146,7 @@ class FilePicker {
     }
   }
 
-  int GetCurrentLevel() const { return curr_level_; }
-
-  FdWithKeyRange* GetNextFile() {
+FdWithKeyRange* FilePicker::GetNextFile() {
     while (!search_ended_) {  // Loops over different levels.
       while (curr_index_in_curr_level_ < curr_file_level_->num_files) {
         // Loops over all files in current level.
@@ -238,7 +234,7 @@ class FilePicker {
     return nullptr;
   }
 
-  FdWithKeyRange* GetNextFileWithTable() {
+FdWithKeyRange* FilePicker::GetNextFileWithTable() {
     while (!search_ended_) {  // Loops over different levels.
       while (curr_index_in_curr_level_ < curr_file_level_->num_files) {
         // Loops over all files in current level.
@@ -310,47 +306,9 @@ class FilePicker {
     return nullptr;
   }
 
-  // getter for current file level
-  // for GET_HIT_L0, GET_HIT_L1 & GET_HIT_L2_AND_UP counts
-  unsigned int GetHitFileLevel() { return hit_file_level_; }
-
-  // Returns true if the most recent "hit file" (i.e., one returned by
-  // GetNextFile()) is at the last index in its level.
-  bool IsHitFileLastInLevel() { return is_hit_file_last_in_level_; }
-
-  const InternalKeyComparator * GetInternalComparator() { return internal_comparator_; }
-
-  const Slice GetInternalKey() { return ikey_; }
-  const Slice GetUserKey() { return user_key_; }
-
- private:
-  unsigned int num_levels_;
-  unsigned int curr_level_;
-  unsigned int returned_file_level_;
-  unsigned int hit_file_level_;
-  int32_t search_left_bound_;
-  int32_t search_right_bound_;
-#ifndef NDEBUG
-  std::vector<FileMetaData*>* files_;
-#endif
-  autovector<LevelFilesBrief>* level_files_brief_;
-  bool search_ended_;
-  bool is_hit_file_last_in_level_;
-  LevelFilesBrief* curr_file_level_;
-  unsigned int curr_index_in_curr_level_;
-  unsigned int start_index_in_curr_level_;
-  Slice user_key_;
-  Slice ikey_;
-  FileIndexer* file_indexer_;
-  const Comparator* user_comparator_;
-  const InternalKeyComparator* internal_comparator_;
-#ifndef NDEBUG
-  FdWithKeyRange* prev_file_;
-#endif
-
   // Setup local variables to search next level.
   // Returns false if there are no more levels to search.
-  bool PrepareNextLevel() {
+bool FilePicker::PrepareNextLevel() {
     curr_level_++;
     while (curr_level_ < num_levels_) {
       curr_file_level_ = &(*level_files_brief_)[curr_level_];
@@ -412,8 +370,7 @@ class FilePicker {
     }
     // curr_level_ = num_levels_. So, no more levels to search.
     return false;
-  }
-};
+}
 //}  // anonymous namespace
 
 VersionStorageInfo::~VersionStorageInfo() { delete[] files_; }
@@ -1584,7 +1541,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
       *key_exists = false;
 }
 
-void Version::AsyncFilterBlock(const ReadOptions& read_options,
+void Version::AsyncFilterBlock(const ReadOptions& /*read_options*/,
                           rocksdb::GPUManager *gpu_manager_, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq, SequenceNumber snapshot,
@@ -1592,9 +1549,9 @@ void Version::AsyncFilterBlock(const ReadOptions& read_options,
                           SequenceNumber* seq, ReadCallback* callback,
                           bool* is_blob) {
 
-  std::vector<SlicewithScheama> schema_k = *(gpu_manager_->schemakey);
-  for (uint i = 0; i < schema_k.size(); i++) {
-    LookupKey k(schema_k[i], snapshot);
+  std::vector<SlicewithSchema> *schema_k = gpu_manager_->schemakey;
+  for (uint i = 0; i < schema_k->size(); i++) {
+    LookupKey k((*schema_k)[i], snapshot);
     Slice ikey = k.internal_key();
     Slice user_key = k.user_key();
 
@@ -1603,10 +1560,10 @@ void Version::AsyncFilterBlock(const ReadOptions& read_options,
 
     PinnedIteratorsManager pinned_iters_mgr;
 
-    GetContext get_context(
+    GetContext * get_context = new GetContext(
         user_comparator(), merge_operator_, info_log_, db_statistics_,
         status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
-        *value[i], value_found, merge_context, max_covering_tombstone_seq, this->env_,
+        gpu_manager_->asyncValues[i], value_found, merge_context, max_covering_tombstone_seq, this->env_,
         seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
     // Pin blocks that we read to hold merge operands
@@ -1614,17 +1571,18 @@ void Version::AsyncFilterBlock(const ReadOptions& read_options,
       pinned_iters_mgr.StartPinning();
     }
 
-    FilePicker fp(
+    FilePicker * fp = new FilePicker(
         storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
         storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
         user_comparator(), internal_comparator());
 
-    gpu_manager_->fp_list.push_back(fp);
-    gpu_manager_->context_list.push_back(get_context);
+    gpu_manager_->fp_list[i] = fp;
+    gpu_manager_->context_list[i] = get_context;
   }
 
   /* manager Queue start */
   gpu_manager_->q_start();
+  gpu_manager_->p_start();
 }
 
 bool Version::IsFilterSkipped(int level, bool is_file_last_in_level) {

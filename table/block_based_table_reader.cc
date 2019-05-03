@@ -2799,11 +2799,11 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
     }
 
     if (schema_key.getTarget() != -1) {
-      std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
       avx::recordFilter(
           records, schema_key, *get_context->val_ptr());
     } else {
-      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
       for (auto &record : records) {
         get_context->val_ptr()->emplace_back(
             std::move(PinnableSlice(record.data_, record.size_)));
@@ -2942,11 +2942,11 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
     else s = Status::TableEnd();
 
     if (schema_key.getTarget() != -1) {
-      std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
       avx::recordFilter(
           records, schema_key, *get_context->val_ptr());
     } else {
-      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
       for (auto &record : records) {
         get_context->val_ptr()->emplace_back(
             std::move(PinnableSlice(record.data_, record.size_)));

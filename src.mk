@@ -128,7 +128,6 @@ LIB_SOURCES =                                                   \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
-  table/gpu_manager.cc                                          \
   tools/dump/db_dump_tool.cc                                    \
   util/arena.cc                                                 \
   util/auto_roll_logger.cc                                      \
@@ -224,6 +223,7 @@ LIB_SOURCES =                                                   \
   utilities/ttl/db_ttl_impl.cc                                  \
   utilities/write_batch_with_index/write_batch_with_index.cc    \
   utilities/write_batch_with_index/write_batch_with_index_internal.cc    \
+  accelerator/gpu_manager.cc					\
 
 ifeq (,$(shell $(CXX) -fsyntax-only -maltivec -xc /dev/null 2>&1))
 LIB_SOURCES_ASM =\
@@ -492,7 +492,8 @@ CUDA_SOURCES =          \
   accelerator/cuda/block_filter.cu \
   accelerator/cuda/block_stream_filter.cu \
   accelerator/cuda/block_stream_filter_v2.cu \
-  accelerator/cuda/block_record_filter.cu
+  accelerator/cuda/block_record_filter.cu \
+  accelerator/cuda/async_record_filter.cu
 
 AVX_SOURCES =           \
   accelerator/avx/filter.cc

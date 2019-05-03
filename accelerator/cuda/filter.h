@@ -14,6 +14,7 @@
 
 #include "accelerator/common.h"
 #include "rocksdb/slice.h"
+#include "async_manager.h"
 
 namespace ruda {
 
@@ -58,5 +59,17 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       const rocksdb::SlicewithSchema &schema,
                       const size_t max_results_count,
                       std::vector<rocksdb::PinnableSlice> &results);
+
+int recordAsyncFilter(/* const */ std::vector<char> &datablocks,
+                      /* const */ std::vector<uint64_t> &seek_indices,
+                      int join_idx,
+                      const size_t max_results_count,
+                      std::vector<rocksdb::PinnableSlice> &results, ruda::RudaAsyncManager * async_manager);
+
+int releaseAsyncManager(ruda::RudaAsyncManager * async_manager);
+
+int initializeGlobal(std::vector<rocksdb::SlicewithSchema> &scheam, cudaStream_t * cuda_stream, uint64_t stream_num, ruda::RudaSchema * d_schema);
+
+bool capacityCheck();
 
 }  // namespace ruda

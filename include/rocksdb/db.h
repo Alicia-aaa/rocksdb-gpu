@@ -53,6 +53,7 @@ class WriteBatch;
 class Env;
 class EventListener;
 class TraceWriter;
+class GPUManager;
 
 using std::unique_ptr;
 

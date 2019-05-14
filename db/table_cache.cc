@@ -780,6 +780,10 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
       fd_read_hists.pop_back();
       fd_skip_filters.pop_back();
       fd_levels.pop_back();
+//      fds.clear();
+//      fd_read_hists.clear();
+//      fd_skip_filters.clear();
+//      fd_levels.clear();
       get_context->key_ptr()->clear();
 
       if(fds.size() != 0) {

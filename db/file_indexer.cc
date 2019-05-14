@@ -12,6 +12,7 @@
 #include <functional>
 #include "db/version_edit.h"
 #include "rocksdb/comparator.h"
+#include <iostream>
 
 namespace rocksdb {
 

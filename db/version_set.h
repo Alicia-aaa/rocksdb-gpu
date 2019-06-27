@@ -637,6 +637,7 @@ class Version {
 
   void ValueFilter(const ReadOptions&, const LookupKey& key,
                    const SlicewithSchema& schema_key,
+                   std::vector<PinnableSlice> &keys,
                    std::vector<PinnableSlice> &value, Status* status,
                    MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
@@ -646,6 +647,7 @@ class Version {
   
   void ValueFilterBlock(const ReadOptions&, const LookupKey& key,
                    const SlicewithSchema& schema_key,
+                   std::vector<PinnableSlice> &keys,
                    std::vector<PinnableSlice> &value, Status* status,
                    MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq, int join_idx,
@@ -785,8 +787,8 @@ class Version {
   // A version number that uniquely represents this version. This is
   // used for debugging and logging purposes only.
   uint64_t version_number_;
-  std::vector<Slice> key_to_find;
-
+  std::vector<Slice *> key_to_find;
+  
   Version(ColumnFamilyData* cfd, VersionSet* vset, const EnvOptions& env_opt,
           MutableCFOptions mutable_cf_options, uint64_t version_number = 0);
 

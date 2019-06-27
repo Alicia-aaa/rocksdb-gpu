@@ -66,6 +66,7 @@ class TransactionBaseImpl : public Transaction {
   Status ValueFilter(const ReadOptions& options,
                      ColumnFamilyHandle* column_family,
                      const SlicewithSchema& key,
+                     std::vector<PinnableSlice> &keys,
                      std::vector<PinnableSlice> &values, int join_idx) override;
 
   using Transaction::AsyncFilter;

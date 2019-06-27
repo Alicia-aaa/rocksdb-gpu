@@ -109,6 +109,14 @@ uint64_t DecodeFixed64(const char* ptr) {
 }
 
 __device__
+bool memcmp(char * left, char * right, size_t length) {
+  for(int i = 0; i < length - 1; i++) {
+      if(left[i] != right[i]) return false;
+  }
+  return true;
+}
+
+__device__
 unsigned long long int atomicAggInc(unsigned long long int *counter) {
   auto g = cooperative_groups::coalesced_threads();
   unsigned long long int warp_res;
@@ -132,7 +140,7 @@ void DecodeNFilterSubDataBlocks(// Parameters
   const char *subblock = &cached_data[start_idx];
   const char *limit = &cached_data[end_idx];
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
-  size_t key_buf_length = 0;
+  //size_t key_buf_length = 0;
   char *key_buf = new char[key_buf_size];
   while (subblock < limit) {
     uint32_t shared, non_shared, value_size;
@@ -150,7 +158,7 @@ void DecodeNFilterSubDataBlocks(// Parameters
       }
       memset(key_buf, 0, sizeof(char) * key_buf_size);
       memcpy(key_buf, key, sizeof(char) * key_size);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     } else {
       key = subblock;
       key_size = shared + non_shared;
@@ -162,7 +170,7 @@ void DecodeNFilterSubDataBlocks(// Parameters
         key_buf = new_key_buf;
       }
       memcpy(key_buf + shared, key, sizeof(char) * non_shared);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     }
 
     const char *value = subblock + non_shared;
@@ -222,7 +230,7 @@ void CachedDecodeNFilterOnSchema(// Parameters
   const char *subblock = cached_data + start_idx;
   const char *limit = cached_data + end_idx;
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
-  size_t key_buf_length = 0;
+  //size_t key_buf_length = 0;
   char *key_buf = new char[key_buf_size];
   while (subblock < limit) {
     uint32_t shared, non_shared, value_size;
@@ -240,7 +248,7 @@ void CachedDecodeNFilterOnSchema(// Parameters
       }
       memset(key_buf, 0, sizeof(char) * key_buf_size);
       memcpy(key_buf, key, sizeof(char) * key_size);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     } else {
       key = subblock;
       key_size = shared + non_shared;
@@ -252,7 +260,7 @@ void CachedDecodeNFilterOnSchema(// Parameters
         key_buf = new_key_buf;
       }
       memcpy(key_buf + shared, key, sizeof(char) * non_shared);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     }
 
     const char *value = subblock + non_shared;
@@ -268,8 +276,9 @@ void CachedDecodeNFilterOnSchema(// Parameters
       subblock = value + value_size;
       continue;
     }
-
-    long decoded_value = rudaConvertRecord(schema, value);
+    
+    char pivot[32] = {0,};
+    long decoded_value = rudaConvertRecord(schema, value, pivot);
     bool filter_result = false;
     switch (schema->ctx._op) {
       case accelerator::EQ:
@@ -287,6 +296,17 @@ void CachedDecodeNFilterOnSchema(// Parameters
       case accelerator::GREATER_EQ:
         filter_result = decoded_value >= schema->ctx._pivot;
         break;
+      case accelerator::NOT_EQ:
+        filter_result = decoded_value != schema->ctx._pivot;
+        break;
+      case accelerator::MATCH:  
+        for(int i = 0; i < schema->ctx.str_num; ++i) {
+          if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
+            filter_result = true;
+            break;
+          }  
+        } 
+        break;       
       case accelerator::INVALID:
         // INVALID case, return all data to result.
         filter_result = true;
@@ -323,9 +343,12 @@ void DecodeNFilterOnSchema(// Parameters
   const char *subblock = data + block_offset + start_idx;
   const char *limit = data + block_offset + end_idx;
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
-  size_t key_buf_length = 0;
+ // size_t key_buf_length = 0;
+
   char *key_buf = new char[key_buf_size];
+ 
   while (subblock < limit) {
+
     uint32_t shared, non_shared, value_size;
     subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
                              &value_size);
@@ -341,7 +364,7 @@ void DecodeNFilterOnSchema(// Parameters
       }
       memset(key_buf, 0, sizeof(char) * key_buf_size);
       memcpy(key_buf, key, sizeof(char) * key_size);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     } else {
       key = subblock;
       key_size = shared + non_shared;
@@ -353,7 +376,7 @@ void DecodeNFilterOnSchema(// Parameters
         key_buf = new_key_buf;
       }
       memcpy(key_buf + shared, key, sizeof(char) * non_shared);
-      key_buf_length = key_size;
+      //key_buf_length = key_size;
     }
 
     const char *value = subblock + non_shared;
@@ -370,7 +393,11 @@ void DecodeNFilterOnSchema(// Parameters
       continue;
     }
 
-    long decoded_value = rudaConvertRecord(schema, value);
+    char pivot[32] = {0,};
+    long decoded_value = rudaConvertRecord(schema, value, pivot);
+//    for(int i = 0; i < schema->ctx.str_num; ++i) {
+//      printf("pivot : %s\n" , schema->ctx.cpivot[i]);
+//    }
     bool filter_result = false;
     switch (schema->ctx._op) {
       case accelerator::EQ:
@@ -388,6 +415,20 @@ void DecodeNFilterOnSchema(// Parameters
       case accelerator::GREATER_EQ:
         filter_result = decoded_value >= schema->ctx._pivot;
         break;
+      case accelerator::NOT_EQ:
+        filter_result = decoded_value != schema->ctx._pivot;
+        break;
+      case accelerator::MATCH:
+        for(int i = 0; i < schema->ctx.str_num; ++i) {
+//            printf("cpivot = %s and pivot = %s and length = %d\n", schema->ctx.cpivot[i], pivot, decoded_value);
+//          printf("cpivot = %d\n", schema->ctx.cpivot[i][decoded_value]);
+//          printf("pivot = %d\n", pivot[decoded_value]);
+          if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
+            filter_result = true;
+            break;
+          }  
+        }  
+        break; 
       case accelerator::INVALID:
         // INVALID case, return all data to result.
         filter_result = true;
@@ -395,15 +436,21 @@ void DecodeNFilterOnSchema(// Parameters
       default:
         break;
     }
+    
     if (filter_result) {
-      unsigned long long int idx = atomicAdd(results_idx, 1);
+      unsigned long long int idx = atomicAggInc(results_idx);
       size_t value_start = value - data;
       results[idx] = RudaKVIndexPair(value_start, value_start + value_size);
+      results[idx].copyKey(key_buf, key_size - 8);     
     }
 
     // Next DataKey...
     subblock = value + value_size;
   }
+  
+//  if (((blockDim.x * blockIdx.x + threadIdx.x) % 1000) == 0) {
+//      printf("counter = %d\n", counter);
+//  }
 
   delete[] key_buf;
 }

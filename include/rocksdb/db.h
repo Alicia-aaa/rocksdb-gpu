@@ -347,6 +347,7 @@ class DB {
   virtual Status ValueFilter(const ReadOptions& /*options*/,
                              ColumnFamilyHandle* /*column_family*/,
                              const SlicewithSchema& /*key*/,
+                             std::vector<PinnableSlice>& /*keys*/,
                              std::vector<PinnableSlice>& /*value*/,
                              int /*join_idx*/) {
     return Status();

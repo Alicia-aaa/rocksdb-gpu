@@ -124,6 +124,12 @@ class BlockBasedTable : public TableReader {
                        std::vector<char>& data,
                        std::vector<uint64_t>& seek_indices,
                        uint64_t seek_index_start_offset) override;
+  
+  Status GetFilteredDataBlocks(const ReadOptions&,
+                       std::vector<char>& data,
+                       std::vector<uint64_t>& seek_indices,
+                       uint64_t seek_index_start_offset, GetContext* get_context) override;  
+  
 
   FragmentedRangeTombstoneIterator* NewRangeTombstoneIterator(
       const ReadOptions& read_options) override;

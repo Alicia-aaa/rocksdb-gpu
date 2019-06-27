@@ -13,6 +13,6 @@
 namespace ruda {
 
 __device__
-long rudaConvertRecord(RudaSchema *schema, const char *record_ptr);
+long rudaConvertRecord(RudaSchema *schema, const char *record_ptr, char *pivot);
 
 }  // namespace ruda

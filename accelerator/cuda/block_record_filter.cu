@@ -11,6 +11,7 @@
 #include "accelerator/cuda/filter.h"
 #include "rocksdb/slice.h"
 #include "table/format.h"
+#include "stdio.h"
 
 #define KB 1024
 #define MB 1024 * KB
@@ -103,7 +104,9 @@ struct RudaRecordBlockContext {
     cudaCheckError(cudaMalloc(
         (void **) &d_results_idx, sizeof(unsigned long long int)));
     total_gpu_used_memory += sizeof(unsigned long long int);
-    kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
+    // NEED TO OPTIMIZE    
+    //kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
+    kApproxResultsCount = (kMaxResultsCount / kStreamCount) + (kMaxResultsCount % kStreamCount);
     cudaCheckError(cudaMalloc(
         (void **) &d_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
     total_gpu_used_memory += sizeof(RudaKVIndexPair) * kApproxResultsCount;
@@ -239,7 +242,8 @@ struct RudaRecordBlockContext {
     }
     size_t shared_mem_size =
         kMaxSharedMemPerBlock > kMaxCacheSize ? kMaxCacheSize : 0;
-    std::cout << "shared_mem_size: " << shared_mem_size << std::endl;
+   // std::cout << "shared_mem_size: " << shared_mem_size << std::endl;
+   // std::cout << "seek_start_offset " << seek_start_offset << std::endl;
     kernel::rudaRecordFilterKernel<<<kGridSizePerStream,
                                     kBlockSize,
                                     shared_mem_size,
@@ -498,7 +502,7 @@ struct RudaRecordBlockManager {
     }
     int counter = 0;
     for (auto &ctx : stream_ctxs) {
-      std::cout << "ExecuteKernel Stream Context " << ++counter << std::endl;
+      //std::cout << "ExecuteKernel Stream Context " << ++counter << std::endl;
       ctx.executeKernel(
           // Parameters
           kTotalDataSize,
@@ -520,10 +524,25 @@ struct RudaRecordBlockManager {
 
   void _translatePairsToSlices(RudaRecordBlockContext &ctx,
                                std::vector<char> &datablocks,
+                               std::vector<rocksdb::Slice> &sub_keys,
                                std::vector<rocksdb::Slice> &sub_values) {
     unsigned long long int count = *ctx.h_results_count;
     for (size_t i = 0; i < count; ++i) {
       RudaKVIndexPair &result = ctx.h_results[i];
+      
+//      char key_buf[128];
+//      size_t size = 0;
+//      size_t ptr = 0;
+//      
+//      for(size_t j = 0; j < result.idx; ++j) {
+//          size_t partkey_size = result.key_indices[j].end_ - result.key_indices[j].start_;
+//          memcpy(key_buf + ptr + result.key_indices[j].shared_, &datablocks[0] + result.key_indices[j].start_, partkey_size);
+//          ptr += result.key_indices[j].shared_;
+//          size += result.key_indices[j].shared_ + partkey_size;
+//      }
+      
+      sub_keys.emplace_back(result.key, result.key_size);
+      
       size_t value_size =
           result.value_index_.end_ - result.value_index_.start_;
       sub_values.emplace_back(
@@ -531,7 +550,7 @@ struct RudaRecordBlockManager {
     }
   }
 
-  void translatePairsToSlices(std::vector<char> &datablocks,
+  void translatePairsToSlices(std::vector<char> &datablocks, std::vector<rocksdb::PinnableSlice> &keys,
                               std::vector<rocksdb::PinnableSlice> &values) {
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
@@ -542,20 +561,22 @@ struct RudaRecordBlockManager {
 
     begin = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> workers;
+    std::vector< std::vector<rocksdb::Slice> > sub_keys_arr(kStreamCount);
     std::vector< std::vector<rocksdb::Slice> > sub_values_arr(kStreamCount);
 
     auto worker_func = [&, this](
         RudaRecordBlockContext &ctx,
-        std::vector<char> &datablocks,
+        std::vector<char> &datablocks, std::vector<rocksdb::Slice> &sub_keys,
         std::vector<rocksdb::Slice> &sub_values) {
       cudaCheckError( cudaEventSynchronize(ctx.kernel_finish_event) );
-      this->_translatePairsToSlices(ctx, datablocks, sub_values);
+      this->_translatePairsToSlices(ctx, datablocks, sub_keys, sub_values);
     };
 
     for (size_t i = 0; i < kStreamCount; ++i) {
+      std::vector<rocksdb::Slice> &sub_keys = sub_keys_arr[i];
       std::vector<rocksdb::Slice> &sub_values = sub_values_arr[i];
       workers.emplace_back(
-          worker_func, std::ref(stream_ctxs[i]), std::ref(datablocks),
+          worker_func, std::ref(stream_ctxs[i]), std::ref(datablocks), std::ref(sub_keys),
           std::ref(sub_values));
     }
 
@@ -564,10 +585,18 @@ struct RudaRecordBlockManager {
     }
 
     for (size_t i = 0; i < kStreamCount; ++i) {
+      std::vector<rocksdb::Slice> &sub_keys = sub_keys_arr[i];  
       std::vector<rocksdb::Slice> &sub_values = sub_values_arr[i];
-      for (auto &sub_value : sub_values) {
-        values.emplace_back(std::move(rocksdb::PinnableSlice(
-            sub_value.data_, sub_value.size_)));
+//      for(size_t j = 0; j< sub_keys.size(); ++j) {
+//        keys.emplace_back(std::move(sub_keys[j]));
+//        values.emplace_back(std::move(rocksdb::PinnableSlice(sub_values[j].data_, sub_values[j].size_)));
+//      }
+      for(auto &sub_key : sub_keys) {
+          keys.emplace_back(std::move(rocksdb::PinnableSlice(sub_key.data_, sub_key.size_)));
+      }
+
+      for(auto &sub_value : sub_values) {
+          values.emplace_back(std::move(rocksdb::PinnableSlice(sub_value.data_, sub_value.size_)));
       }
     }
 
@@ -588,7 +617,10 @@ struct RudaRecordBlockManager {
         << "kApproxStreamSize: "
             << kApproxStreamSize << std::endl
         << "Max Results Count: " << kMaxResultsCount << std::endl
+        << "Approximate Result Count : " << kMaxResultsCount / ( kStreamCount - 1 ) << " vs "
+        << (kMaxResultsCount / kStreamCount) + (kMaxResultsCount % kStreamCount ) << std::endl
         << "======================" << std::endl;
+    
 
     std::cout << "RecordBlockContexts" << std::endl;
     for (size_t i = 0; i < kStreamCount; ++i) {
@@ -602,10 +634,10 @@ struct RudaRecordBlockManager {
           << "Size DataBlocks: " << ctx.datablocks_size << std::endl
           << "_____" << std::endl
           << "Max cache size: " << ctx.kMaxCacheSize << std::endl;
-      for (size_t j = 0; j < ctx.kGridSizePerStream; ++j) {
-        std::cout << "GPU Block Seek Start[" << j << "]: "
-            << ctx.gpu_block_seek_starts[j] << std::endl;
-      }
+//      for (size_t j = 0; j < ctx.kGridSizePerStream; ++j) {
+//        std::cout << "GPU Block Seek Start[" << j << "]: "
+//            << ctx.gpu_block_seek_starts[j] << std::endl;
+//      }
       std::cout << "-----------" << std::endl;
     }
   }
@@ -639,17 +671,24 @@ void kernel::rudaRecordFilterKernel(// Parameters (ReadOnly)
                                     unsigned long long int *results_idx,
                                     // Results
                                     RudaKVIndexPair *results) {
+    
   uint64_t i = offset + blockDim.x * blockIdx.x + threadIdx.x;
-
+ 
   // Overflow kernel ptr case.
   if (i >= kSize) {
+//    printf("i : %d >= kSize\n ", i);
     return;
   }
 
+ // printf("idx : %d , offset : %u , blockDim : %u, blockIdx : %u, threadIdx : %u\n", i, offset, blockDim.x, blockIdx.x, threadIdx.x);
+//  printf("threadIdx : %d\n", threadIdx.x);
+//  printf("blockIdx : %d\n", blockIdx.x);
+  //printf("idx : %d\n", i);
   // Calculates datablock boundary on thread.
   uint64_t block_seek_start_index = block_seek_start_indices[blockIdx.x];
   uint64_t start = seek_indices[i] - block_seek_start_index;
   uint64_t end = 0;
+
   if (i == (kSize - 1)) {
     // Last seek index case. 'end' must be end of data.
     end = dataSize - block_seek_start_index;
@@ -658,29 +697,30 @@ void kernel::rudaRecordFilterKernel(// Parameters (ReadOnly)
     end = seek_indices[i + 1] - block_seek_start_index;
   }
   size_t size = end - start;
+    
 
-  if (use_shared_memory) {
-    // Shared variables.
-    // Caches data used from threads in single block.
-    extern __shared__ char cached_data[];
-
-    for (size_t j = start; j < end; ++j) {
-      size_t data_idx = block_seek_start_index + j;
-      if (data_idx >= dataSize || j >= max_cache_size) {
-        break;
-      }
-      cached_data[j] = data[data_idx];
-    }
-
-    __syncthreads();
-
-    CachedDecodeNFilterOnSchema(
-        // Parameters
-        cached_data, size, block_seek_start_index, start, end, schema,
-        // Results
-        results_idx, results);
-    return;
-  }
+//  if (use_shared_memory) {
+//    // Shared variables.
+//    // Caches data used from threads in single block.
+//    extern __shared__ char cached_data[];
+//
+//    for (size_t j = start; j < end; ++j) {
+//      size_t data_idx = block_seek_start_index + j;
+//      if (data_idx >= dataSize || j >= max_cache_size) {
+//        break;
+//      }
+//      cached_data[j] = data[data_idx];
+//    }
+//
+//    __syncthreads();
+//
+//    CachedDecodeNFilterOnSchema(
+//        // Parameters
+//        cached_data, size, block_seek_start_index, start, end, schema,
+//        // Results
+//        results_idx, results);
+//    return;
+//  }
 
   // Non-shared memory.
   DecodeNFilterOnSchema(
@@ -694,6 +734,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       /* const */ std::vector<uint64_t> &seek_indices,
                       const rocksdb::SlicewithSchema &schema,
                       const size_t max_results_count,
+                      std::vector<rocksdb::PinnableSlice> &keys,
                       std::vector<rocksdb::PinnableSlice> &values) {
   std::cout << "[GPU][recordBlockFilter] START" << std::endl;
   if (seek_indices.size() < 256) {
@@ -714,7 +755,21 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
   cudaCheckError( cudaGetDevice(&deviceId) );
   cudaDeviceProp prop;
   cudaCheckError( cudaGetDeviceProperties(&prop, deviceId) );
-
+  
+//  size_t size = 0;
+//  size_t free_byte;
+//  size_t total_byte;
+//  
+//  cudaDeviceGetLimit(&size, cudaLimitPrintfFifoSize);
+//  std::cout << "[GPU] cudaLimitPrintFifoSize : " << size << std::endl;
+//  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
+//  std::cout << "[GPU] cudaLimitMallocHeapSize : " << size << std::endl;
+  //cudaDeviceSetLimit(cudaLimitMallocHeapSize, 10485760);
+  //cudaDeviceSetLimit(cudaLimitPrintfFifoSize, 1048576000);
+     
+//  cudaMemGetInfo(&free_byte, &total_byte);
+//  std::cout << "[GPU] Memory before copy Free : " << free_byte << " / " << total_byte << std::endl;
+  
   // Cuda can't use const variable. So we copy SlicewithSchema. (Shallow copy)
   rocksdb::SlicewithSchema* copied_schema = schema.clone();
 
@@ -732,15 +787,21 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
   // ----------------------------------------------
   // Cuda Stream Pipelined (Accelerate)
   block_mgr.populateToCuda(datablocks, seek_indices, *copied_schema);
-  std::cout << "[GPU][recordBlockFilter] Total GPU used memory: "
-      << (block_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
+//  std::cout << "[GPU][recordBlockFilter] Total GPU used memory: "
+//      << (block_mgr.total_gpu_used_memory / (MB)) << "MB" << std::endl;
+//  
+//  cudaMemGetInfo(&free_byte, &total_byte);
+//  std::cout << "[GPU] Memory after copy Free : " << free_byte << " / " << total_byte << std::endl;
   block_mgr.executeKernels(datablocks.size());
   block_mgr.copyFromCuda();
   // ----------------------------------------------
-  block_mgr.translatePairsToSlices(datablocks, values);
+  block_mgr.translatePairsToSlices(datablocks, keys, values);
   block_mgr.unregisterPinnedMemory(datablocks, seek_indices, *copied_schema);
   block_mgr.clear();
   delete copied_schema;
+  cudaDeviceReset();
+//  cudaMemGetInfo(&free_byte, &total_byte);
+//  std::cout << "[GPU] Memory after free Free : " << free_byte << " / " << total_byte << std::endl;
 
   return accelerator::ACC_OK;
 }

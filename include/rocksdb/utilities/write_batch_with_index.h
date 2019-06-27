@@ -212,6 +212,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
                                    const SlicewithSchema& key,
+                                   std::vector<PinnableSlice> &keys,
                                    std::vector<PinnableSlice>& values, int join_idx);
 
   Status AsyncFilterFromBatchAndDB(DB* db, ColumnFamilyHandle* column_family,
@@ -261,6 +262,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
                                    const SlicewithSchema& key,
+                                   std::vector<PinnableSlice> &keys,
                                    std::vector<PinnableSlice> & values, int join_idx,
                                    ReadCallback* callback);
 

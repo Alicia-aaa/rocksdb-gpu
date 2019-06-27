@@ -118,11 +118,13 @@ class DBImpl : public DB {
   virtual Status ValueFilter(const ReadOptions& options,
                              ColumnFamilyHandle* column_family,
                              const SlicewithSchema& key,
+                             std::vector<PinnableSlice> &keys,
                              std::vector<PinnableSlice> &values, int join_idx) override;
 
   Status ValueFilterImpl(const ReadOptions& options,
                          ColumnFamilyHandle* column_family,
                          const SlicewithSchema& key,
+                         std::vector<PinnableSlice> &keys,
                          std::vector<PinnableSlice> &values,
                          int join_idx,
                          bool* value_found = nullptr,

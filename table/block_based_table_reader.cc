@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <time.h>
 
 #include "accelerator/avx/filter.h"
 #include "accelerator/util.h"
@@ -1903,6 +1904,7 @@ Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
     FilePrefetchBuffer* prefetch_buffer, Rep* rep, const ReadOptions& ro,
     const BlockHandle& handle, Slice compression_dict,
     CachableEntry<Block>* block_entry, bool is_index, GetContext* get_context) {
+     
   assert(block_entry != nullptr);
   const bool no_io = (ro.read_tier == kBlockCacheTier);
   Cache* block_cache = rep->table_options.block_cache.get();
@@ -2418,7 +2420,15 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
                                       std::vector<uint64_t>& seek_indices,
                                       uint64_t seek_index_start_offset) {
   Status s;
-
+  
+//  std::unique_ptr<FilePrefetchBuffer> prefetch_buffer;
+//  prefetch_buffer.reset(new FilePrefetchBuffer(rep_->file.get(), 8*1024, 256*1024));
+  
+  clock_t begin, end;
+  clock_t prefetchTime = 0;
+  clock_t getBlockTime = 0;
+  clock_t vectorCopyTime = 0;
+  
   IndexBlockIter iiter_on_stack;
   auto iiter =
       NewIndexIterator(read_options,
@@ -2429,6 +2439,10 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
     iiter_unique_ptr.reset(iiter);
   }
 
+//  size_t readahead_size_ = 8 * 1024;
+//  size_t readahead_limit_ = 0;
+//  size_t kMaxReadaheadSize = 256 * 1024;
+  
   uint64_t accumulated_data_index = seek_index_start_offset;
   for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
     BlockHandle handle = iiter->value();
@@ -2437,8 +2451,19 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
       compression_dict = rep_->compression_dict_block->data;
     }
 
+//    if(handle.offset() + static_cast<size_t>(handle.size()) + 5 > readahead_limit_)
+//    {
+//        begin = clock();
+//         rep_->file->Prefetch(handle.offset(), readahead_size_);
+//        readahead_limit_ = static_cast<size_t>(handle.offset() + readahead_size_);
+//        readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ * 2);
+//        end = clock();
+//        prefetchTime += (end - begin);
+//    }
+    
     std::unique_ptr<Block> block;
     if (s.ok()) {
+        begin = clock();
       s = ReadBlockFromFile(
           rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
           read_options, handle, &block, rep_->ioptions,
@@ -2447,7 +2472,10 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
           rep_->persistent_cache_options, rep_->global_seqno,
           rep_->table_options.read_amp_bytes_per_bit,
           GetMemoryAllocator(rep_->table_options));
+      end = clock();
+      getBlockTime += (end - begin);
     }
+    
     if (s.ok()) {
       const char *block_data = block.get()->data();
       uint32_t block_restart_offset = block.get()->restart_offset();
@@ -2478,9 +2506,79 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
       // }
       // printf("---------------DataBlock End\n");
 
-      std::copy(
-          block_data, block_data + block_restart_offset,
-          std::back_inserter(data));
+//      std::vector<char> vec(cstr, cstr + strlen(cstr));
+      
+      begin = clock();
+      
+      data.insert(data.end(), block_data, block_data + block_restart_offset);
+      
+//      std::copy(
+//          block_data, block_data + block_restart_offset,
+//          std::back_inserter(data));
+      end = clock();
+      
+      for (size_t i = 0; i < block_num_restarts; ++i) {
+        uint64_t seek_index = block.get()->GetDecodedSeekIndex(i);
+        seek_index += accumulated_data_index;
+        seek_indices.push_back(seek_index);
+      }
+      accumulated_data_index += block_restart_offset;
+     
+      vectorCopyTime += (end - begin);
+    }
+  }
+  
+//  std::cout << " elapsed time in Prefetch = " << (prefetchTime/CLOCKS_PER_SEC) << std::endl;
+//  std::cout << " elapsed time in getBlock = " << (getBlockTime/CLOCKS_PER_SEC) << std::endl;
+//  std::cout << " elapsed time in vectorCopy = " << (vectorCopyTime/CLOCKS_PER_SEC) << std::endl;
+
+  return s;
+}
+
+Status BlockBasedTable::GetFilteredDataBlocks(const ReadOptions& read_options,
+                                      std::vector<char>& data,
+                                      std::vector<uint64_t>& seek_indices,
+                                      uint64_t seek_index_start_offset, GetContext * get_context) {
+  Status s;
+
+  IndexBlockIter iiter_on_stack;
+  auto iiter =
+      NewIndexIterator(read_options,
+                       /* disable_prefix_seek */ false, &iiter_on_stack,
+                       /* index_entry */ nullptr, /* get_context */ nullptr);
+  std::unique_ptr<InternalIteratorBase<BlockHandle>> iiter_unique_ptr;
+  if (iiter != &iiter_on_stack) {
+    iiter_unique_ptr.reset(iiter);
+  }
+
+  uint64_t accumulated_data_index = seek_index_start_offset;
+  for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
+    BlockHandle handle = iiter->value();
+    
+    if(get_context->checkTableRangeSlice(Slice(iiter->key().data(), iiter->key().size() - 8))) break;
+    Slice compression_dict;
+    if (s.ok() && rep_->compression_dict_block) {
+      compression_dict = rep_->compression_dict_block->data;
+    }
+
+    std::unique_ptr<Block> block;
+    if (s.ok()) {
+      s = ReadBlockFromFile(
+          rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
+          read_options, handle, &block, rep_->ioptions,
+          rep_->blocks_maybe_compressed /*do_decompress*/,
+          rep_->blocks_maybe_compressed, compression_dict,
+          rep_->persistent_cache_options, rep_->global_seqno,
+          rep_->table_options.read_amp_bytes_per_bit,
+          GetMemoryAllocator(rep_->table_options));
+    }
+    if (s.ok()) {
+      const char *block_data = block.get()->data();
+      uint32_t block_restart_offset = block.get()->restart_offset();
+      uint32_t block_num_restarts = block.get()->NumRestarts();
+
+      data.insert(data.end(), block_data, block_data + block_restart_offset);
+      
       for (size_t i = 0; i < block_num_restarts; ++i) {
         uint64_t seek_index = block.get()->GetDecodedSeekIndex(i);
         seek_index += accumulated_data_index;
@@ -2809,11 +2907,11 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
             std::move(PinnableSlice(record.data_, record.size_)));
       }
     }
-    for (auto &result : *get_context->val_ptr()) {
-      //long col_value = accelerator::convertRecord(schema_key, result.data_);
-      accelerator::convertRecord(schema_key, result.data_);
-      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
-    }
+//    for (auto &result : *get_context->val_ptr()) {
+//      //long col_value = accelerator::convertRecord(schema_key, result.data_);
+//      accelerator::convertRecord(schema_key, result.data_);
+//      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
+//    }
 
     if (s.ok()) {
       s = iiter->status();
@@ -2872,7 +2970,8 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
 
     bool done = false;
     std::vector<Slice> records;
-
+    std::vector<PinnableSlice> k_records;
+    
     for (iiter->Seek(*(get_context->key_ptr())); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
       bool not_exist_in_filter =
@@ -2928,7 +3027,10 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
           break;
         }
 
+
+        k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         records.emplace_back(biter.value().data_, biter.value().size_);
+        
 //        std::cout << "[BlockBasedTable::AvxFilter] Data: "
 //            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
 //            << std::endl;
@@ -2936,27 +3038,45 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
       s = biter.status();
       break;
     }
+//    std::cout << "Next Error " << done << std::endl;
+//    std::cout << "itter key " << iiter->key().ToString(1) << std::endl;
+//    if(iiter->Valid()) {
+//        iiter->Next();
+//        *(get_context->key_ptr()) = iiter->key();
+//    } else {
+//        s = Status::TableEnd();
+//    }
 
     iiter->Next();
-    if(iiter->Valid()) *(get_context->key_ptr()) = iiter->key();
-    else s = Status::TableEnd();
+    if(iiter->Valid() && !done) {
+        get_context->key_ptr()->size_ = iiter->key().size_;
+        memcpy((void *) get_context->key_ptr()->data_, (void *) iiter->key().data_, iiter->key().size_);
+    } else { 
+        s = Status::TableEnd(); 
+    }
 
     if (schema_key.getTarget() != -1) {
-      //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-      avx::recordFilter(
-          records, schema_key, *get_context->val_ptr());
+//      std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+      avx::recordFilterWithKey(k_records,
+          records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
     } else {
-      //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
-      for (auto &record : records) {
-        get_context->val_ptr()->emplace_back(
-            std::move(PinnableSlice(record.data_, record.size_)));
-      }
+//      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+//      for (auto &record : records) {
+//        get_context->val_ptr()->emplace_back(
+//            std::move(PinnableSlice(record.data_, record.size_)));
+//      }
+        for(uint i = 0; i < k_records.size(); i++) {
+            get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
+            get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
+        }            
     }
-    for (auto &result : *get_context->val_ptr()) {
-      //long col_value = accelerator::convertRecord(schema_key, result.data_);
-      accelerator::convertRecord(schema_key, result.data_);
-      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
-    }
+    
+    
+//    for (auto &result : *get_context->val_ptr()) {
+//      //long col_value = accelerator::convertRecord(schema_key, result.data_);
+//      accelerator::convertRecord(schema_key, result.data_);
+//      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
+//    }
 
     if (s.ok()) {
       s = iiter->status();

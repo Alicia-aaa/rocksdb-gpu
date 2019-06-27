@@ -199,6 +199,7 @@ class Transaction {
   virtual Status ValueFilter(const ReadOptions& options,
                              ColumnFamilyHandle* column_family,
                              const SlicewithSchema& key,
+                             std::vector<PinnableSlice> &keys,
                              std::vector<PinnableSlice> &pinnable_val, int join_idx) = 0;
 
   virtual Status AsyncFilter(ColumnFamilyHandle* column_family,

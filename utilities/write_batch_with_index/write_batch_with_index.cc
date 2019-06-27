@@ -926,22 +926,22 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    const SlicewithSchema& key, std::vector<PinnableSlice> &pinnable_val, int join_idx) {
+    const SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, int join_idx) {
   return ValueFilterFromBatchAndDB(
-      db, read_options, column_family, key, pinnable_val, join_idx, nullptr);
+      db, read_options, column_family, key, keys, pinnable_val, join_idx, nullptr);
 }
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    const SlicewithSchema& key, std::vector<PinnableSlice> &pinnable_val, int join_idx,
+    const SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, int join_idx,
     ReadCallback* callback) {
   Status s;
   // Did not find key in batch OR could not resolve Merges.  Try DB.
   if (!callback) {
-    s = db->ValueFilter(read_options, column_family, key, pinnable_val, join_idx);
+    s = db->ValueFilter(read_options, column_family, key, keys, pinnable_val, join_idx);
   } else {
     s = static_cast_with_check<DBImpl, DB>(db->GetRootDB())->ValueFilterImpl(
-        read_options, column_family, key, pinnable_val, join_idx, nullptr, callback);
+        read_options, column_family, key, keys, pinnable_val, join_idx, nullptr, callback);
   }
   return s;
 }

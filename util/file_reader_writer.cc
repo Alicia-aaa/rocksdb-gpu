@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <iostream>
 
 #include "monitoring/histogram.h"
 #include "monitoring/iostats_context_imp.h"
@@ -779,6 +780,7 @@ bool FilePrefetchBuffer::TryReadFromCache(uint64_t offset, size_t n,
       assert(file_reader_ != nullptr);
       assert(max_readahead_size_ >= readahead_size_);
 
+      std::cout << " tryreadFrom cache " << std::endl;
       Status s = Prefetch(file_reader_, offset, n + readahead_size_);
       if (!s.ok()) {
         return false;

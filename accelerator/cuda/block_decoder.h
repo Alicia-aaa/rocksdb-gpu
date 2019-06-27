@@ -158,6 +158,9 @@ class RudaIndexEntry {
 
   __host__ __device__
   RudaIndexEntry(size_t start, size_t end) : used(true), start_(start), end_(end) {}
+  
+  __host__ __device__
+  RudaIndexEntry(size_t shared, size_t start, size_t end) : used(true), start_(start), end_(end) {}
 
   bool used;
   size_t start_;
@@ -175,7 +178,7 @@ class RudaKVIndexPair {
                   size_t value_end)
       : key_index_(RudaIndexEntry(key_start, key_end)),
         value_index_(RudaIndexEntry(value_start, value_end)) {}
-
+    
   __host__ __device__
   RudaKVIndexPair(size_t value_start, size_t value_end)
       : value_index_(RudaIndexEntry(value_start, value_end)) {}
@@ -197,11 +200,25 @@ class RudaKVIndexPair {
       delete[] dh_key;
     }
   }
-
+  
+//  __device__
+//  void copyKeyIdx(RudaIndexEntry * key_idxs, uint idx_num) {
+//    idx = idx_num;
+//    memcpy(key_indices, key_idxs, sizeof(RudaIndexEntry) * idx_num);  
+//  }
+  
+  __device__
+  void copyKey(char * key_src, size_t key_size_) {
+    key_size = key_size_;
+    memcpy(key, key_src, sizeof(char) * key_size);  
+  }
+  
   RudaIndexEntry key_index_;
+  //RudaIndexEntry key_indices[5];
+  char key[32];
   RudaIndexEntry value_index_;
 
-  // Store key in cuda device heap memory
+    // Store key in cuda device heap memory
   char *dh_key = nullptr;
   size_t key_size;
 };
@@ -255,6 +272,7 @@ class RudaSchema {
     cudaFree(data);
     cudaFree(field_type);
     cudaFree(field_length);
+    cudaFree(field_skip);
     return cudaGetLastError();
   }
 

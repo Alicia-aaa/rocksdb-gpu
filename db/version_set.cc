@@ -393,6 +393,7 @@ Version::~Version() {
       }
     }
   }
+  for(uint i = 0; i < 10; i++) delete key_to_find[i];
 }
 
 int FindFile(const InternalKeyComparator& icmp,
@@ -1212,7 +1213,7 @@ Version::Version(ColumnFamilyData* column_family_data, VersionSet* vset,
       refs_(0),
       env_options_(env_opt),
       mutable_cf_options_(mutable_cf_options),
-      version_number_(version_number) {key_to_find = std::vector<Slice>(10, Slice());}
+      version_number_(version_number) { for(uint i=0; i<10; i++) { key_to_find.push_back(new Slice());}}
 
 void Version::Get(const ReadOptions& read_options, const LookupKey& k,
                   PinnableSlice* value, Status* status,
@@ -1347,6 +1348,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 
 void Version::ValueFilter(const ReadOptions& read_options,
                           const LookupKey& k, const SlicewithSchema& schema_k,
+                          std::vector<PinnableSlice> &keys,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
@@ -1366,7 +1368,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
   PinnedIteratorsManager pinned_iters_mgr;
   GetContext get_context(
       user_comparator(), merge_operator_, info_log_, db_statistics_,
-      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
+      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
       value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
       seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
@@ -1461,6 +1463,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
 
 void Version::ValueFilterBlock(const ReadOptions& read_options,
                           const LookupKey& k, const SlicewithSchema& schema_k,
+                          std::vector<PinnableSlice> &keys,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq, int join_idx,
@@ -1479,11 +1482,42 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
 
   PinnedIteratorsManager pinned_iters_mgr;
 
-  if (key_to_find[join_idx].size() == 0) key_to_find[join_idx] = k.internal_key();
-  GetContext get_context(
+  //std::cout << "key_to_find at " << join_idx << " key : " << key_to_find[join_idx]->ToString(1) << std::endl;
+           
+  if (key_to_find[join_idx]->empty()) {
+      //key_to_find[join_idx] = k.internal_key();
+      
+//    for(uint i = 0; i < 5; i++) {
+//      std::cout << "key_to_find after ValueFilter " << i << " key : " << key_to_find[i]->ToString(1) << std::endl;
+//    }
+
+//    std::cout << " key" << key_to_find[join_idx]->ToString(1) << std::endl;
+//    std::cout << " key" << k.internal_key().ToString(1) << std::endl;
+//    char * temp = new char[k.internal_key().size_];
+//    memcpy((void *) temp, (void *) k.internal_key().data_, k.internal_key().size_);
+//    std::cout << "real "  <<std::endl;
+    
+    key_to_find[join_idx]->data_ = new char[k.internal_key().size_];
+    memcpy((void *) key_to_find[join_idx]->data_, (void *) k.internal_key().data_, k.internal_key().size_);
+    
+    key_to_find[join_idx]->size_ = k.internal_key().size_;
+//    std::cout << " memcpy " << std::endl;
+//      
+//    std::cout << "key_to_find at " << join_idx << " size " << key_to_find[join_idx]->size_ 
+//              <<  " key : " << key_to_find[join_idx]->ToString(1) << std::endl;
+  }
+  //std::cout << "key_to_find at " << join_idx << " key : " << key_to_find[join_idx]->ToString(1) << std::endl;
+    
+//  GetContext get_context(
+//      user_comparator(), merge_operator_, info_log_, db_statistics_,
+//      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
+//      value, value_found, merge_context, max_covering_tombstone_seq, this->env_, key_to_find[join_idx],
+//      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
+  
+    GetContext get_context(
       user_comparator(), merge_operator_, info_log_, db_statistics_,
-      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key,
-      value, value_found, merge_context, max_covering_tombstone_seq, this->env_, &key_to_find[join_idx],
+      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
+      value, value_found, merge_context, max_covering_tombstone_seq, this->env_, key_to_find[join_idx],
       seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
   // Pin blocks that we read to hold merge operands
@@ -1533,6 +1567,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
   
   FdWithKeyRange* f = fp.GetNextFileWithTable();
 
+  //std::cout << "join_idx in rocksdb = " << join_idx << std::endl;
   if(storage_info_.table_related_files_[join_idx].empty()) {
     while (f != nullptr) {
       if (*max_covering_tombstone_seq > 0) {
@@ -1563,6 +1598,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
       f = fp.GetNextFileWithTable();
      }
   }
+//  std::cout <<"[Related File num] join idx = " << join_idx << " " << storage_info_.table_related_files_[join_idx].size() << std::endl;
   
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilterBlock(
@@ -1570,6 +1606,10 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
       mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_[join_idx], storage_info_.fd_read_hists[join_idx],
       storage_info_.fd_skip_filters[join_idx], storage_info_.fd_levels[join_idx]);
 
+//  for(uint i = 0; i < 5; i++) {
+//    std::cout << "key_to_find after ValueFilter " << i << " key : " << key_to_find[i]->ToString(1) << std::endl;
+//  }
+  
   if (key_exists != nullptr)
       *key_exists = false;
 }

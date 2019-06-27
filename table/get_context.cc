@@ -55,7 +55,8 @@ GetContext::GetContext(const Comparator* ucmp,
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(pinnable_val),
-	    values(nullptr),
+      keys(nullptr),
+      values(nullptr),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
@@ -88,6 +89,42 @@ GetContext::GetContext(const Comparator* ucmp,
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(nullptr),
+      keys(nullptr),
+      values(&pinnable_val),
+      value_found_(value_found),
+      merge_context_(merge_context),
+      max_covering_tombstone_seq_(_max_covering_tombstone_seq),
+      env_(env),
+      key_to_find(nullptr),
+      seq_(seq),
+      replay_log_(nullptr),
+      pinned_iters_mgr_(_pinned_iters_mgr),
+      callback_(callback),
+      is_blob_index_(is_blob_index) {
+  if (seq_) {
+    *seq_ = kMaxSequenceNumber;
+  }
+  sample_ = should_sample_file_read();
+}
+
+GetContext::GetContext(const Comparator* ucmp,
+                       const MergeOperator* merge_operator, Logger* logger,
+                       Statistics* statistics, GetState init_state,
+                       const Slice& user_key, std::vector<PinnableSlice> &keys,
+                       std::vector<PinnableSlice> &pinnable_val,
+                       bool* value_found, MergeContext* merge_context,
+                       SequenceNumber* _max_covering_tombstone_seq, Env* env,
+                       SequenceNumber* seq,
+                       PinnedIteratorsManager* _pinned_iters_mgr,
+                       ReadCallback* callback, bool* is_blob_index)
+    : ucmp_(ucmp),
+      merge_operator_(merge_operator),
+      logger_(logger),
+      statistics_(statistics),
+      state_(init_state),
+      user_key_(user_key),
+      pinnable_val_(nullptr),
+      keys(&keys),
       values(&pinnable_val),
       value_found_(value_found),
       merge_context_(merge_context),
@@ -122,7 +159,43 @@ GetContext::GetContext(const Comparator* ucmp,
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(nullptr),
-	    values(&pinnable_val),
+      keys(nullptr),
+      values(&pinnable_val),
+      value_found_(value_found),
+      merge_context_(merge_context),
+      max_covering_tombstone_seq_(_max_covering_tombstone_seq),
+      env_(env),
+      key_to_find(key_to_find_),
+      seq_(seq),
+      replay_log_(nullptr),
+      pinned_iters_mgr_(_pinned_iters_mgr),
+      callback_(callback),
+      is_blob_index_(is_blob_index) {
+  if (seq_) {
+    *seq_ = kMaxSequenceNumber;
+  }
+  sample_ = should_sample_file_read();
+}
+
+GetContext::GetContext(const Comparator* ucmp,
+                       const MergeOperator* merge_operator, Logger* logger,
+                       Statistics* statistics, GetState init_state,
+                       const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val,
+                       bool* value_found, MergeContext* merge_context,
+                       SequenceNumber* _max_covering_tombstone_seq, Env* env,
+                       Slice* key_to_find_,
+                       SequenceNumber* seq,
+                       PinnedIteratorsManager* _pinned_iters_mgr,
+                       ReadCallback* callback, bool* is_blob_index)
+    : ucmp_(ucmp),
+      merge_operator_(merge_operator),
+      logger_(logger),
+      statistics_(statistics),
+      state_(init_state),
+      user_key_(user_key),
+      pinnable_val_(nullptr),
+      keys(&keys),        
+      values(&pinnable_val),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
@@ -364,12 +437,21 @@ bool GetContext::checkTableRange(const ParsedInternalKey& parsed_key) {
 
 //  std::cout << "parsed_key " << Slice(parsed_key.user_key.data_, 4).ToString(1)
 //		  << " and user_key " << user_key_.ToString(1) << std::endl;
-  if (ucmp_->Equal(Slice(parsed_key.user_key.data_,4), user_key_)) {
+  if (ucmp_->Equal(Slice(parsed_key.user_key.data_, 4), user_key_)) {
 	  return true;
   }
 
   return false;
 }
+
+bool GetContext::checkTableRangeSlice(const Slice& key) {
+
+  if (ucmp_->Compare(Slice(key.data_, 4), user_key_) > 0) {
+	  return true;
+  }
+  return false;
+}
+
 
 void replayGetContextLog(const Slice& replay_log, const Slice& user_key,
                          GetContext* get_context, Cleanable* value_pinner) {

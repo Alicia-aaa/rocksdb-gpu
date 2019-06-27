@@ -54,7 +54,9 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
     //   year, month, day);
     // long test = (result % 32L) + (result / 32L % 16L) * 100L + (result/(16L*32L)) * 10000L;
     // printf("[util.h][convertRecord] test: %ld\n", test);
-  } else if (schema_key.getType(target_idx) == 3) { // Long Type
+  } else if (schema_key.getType(target_idx) == 3 ) { // Long Type
+    result = sint4korr(record_ptr);
+  } else if (schema_key.getType(target_idx) == 4 ) {
     result = sint4korr(record_ptr);
   }
   // printf("[util.h][convertRecord] converted value: %ld\n", result);

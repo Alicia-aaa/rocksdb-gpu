@@ -1215,8 +1215,9 @@ Status DBImpl::Get(const ReadOptions& read_options,
 Status DBImpl::ValueFilter(const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family,
                            const SlicewithSchema& key,
+                           std::vector<PinnableSlice> &keys,
                            std::vector<PinnableSlice> &value, int join_idx) {
-  return ValueFilterImpl(read_options, column_family, key, value, join_idx);
+  return ValueFilterImpl(read_options, column_family, key, keys, value, join_idx);
 }
 
 Status DBImpl::AsyncFilter(ColumnFamilyHandle* column_family,
@@ -1344,6 +1345,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                ColumnFamilyHandle* column_family,
                                const SlicewithSchema& key,
+                               std::vector<PinnableSlice> &keys,
                                std::vector<PinnableSlice> &pinnable_val, int join_idx,
                                bool* value_found,
                                ReadCallback* callback, bool* is_blob_index) {
@@ -1435,13 +1437,13 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   PERF_TIMER_GUARD(get_from_output_files_time);
   if (read_options.value_filter_mode == accelerator::ValueFilterMode::AVX_BLOCK) {
-    sv->current->ValueFilterBlock(read_options, lkey, key, pinnable_val, &s,
+    sv->current->ValueFilterBlock(read_options, lkey, key, keys, pinnable_val, &s,
                                   &merge_context, &max_covering_tombstone_seq,
                                   join_idx, value_found, nullptr, nullptr,
                                   callback, is_blob_index);
   } else {
     std::cout << "ValueFilter Called " << std::endl;
-    sv->current->ValueFilter(read_options, lkey, key, pinnable_val, &s,
+    sv->current->ValueFilter(read_options, lkey, key, keys, pinnable_val, &s,
                               &merge_context, &max_covering_tombstone_seq,
                               value_found, nullptr, nullptr, callback,
                               is_blob_index);

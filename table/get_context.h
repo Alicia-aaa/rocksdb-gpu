@@ -67,10 +67,28 @@ class GetContext {
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
+  
+  GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
+             Logger* logger, Statistics* statistics, GetState init_state,
+             const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value, bool* value_found,
+             MergeContext* merge_context,
+             SequenceNumber* max_covering_tombstone_seq, Env* env,
+             SequenceNumber* seq = nullptr,
+             PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
+             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
 
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
              const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
+             MergeContext* merge_context,
+             SequenceNumber* max_covering_tombstone_seq, Env* env, Slice *key_to_find,
+             SequenceNumber* seq = nullptr,
+             PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
+             ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
+  
+  GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
+             Logger* logger, Statistics* statistics, GetState init_state,
+             const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value, bool* value_found,
              MergeContext* merge_context,
              SequenceNumber* max_covering_tombstone_seq, Env* env, Slice *key_to_find,
              SequenceNumber* seq = nullptr,
@@ -91,6 +109,8 @@ class GetContext {
                  bool* matched, Cleanable* value_pinner = nullptr);
 
   bool checkTableRange(const ParsedInternalKey& parsed_key);
+  
+  bool checkTableRangeSlice(const Slice& key);
 
   // Simplified version of the previous function. Should only be used when we
   // know that the operation is a Put.
@@ -122,6 +142,10 @@ class GetContext {
   }
 
   void ReportCounters();
+  
+  std::vector<PinnableSlice> *keys_ptr() {
+      return keys;
+  }
 
   std::vector<PinnableSlice> *val_ptr() {
 	  return values;
@@ -141,6 +165,7 @@ class GetContext {
   GetState state_;
   Slice user_key_;
   PinnableSlice* pinnable_val_;
+  std::vector<PinnableSlice> *keys;
   std::vector<PinnableSlice> *values;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
   MergeContext* merge_context_;

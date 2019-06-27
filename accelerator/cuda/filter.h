@@ -59,7 +59,7 @@ int sstStreamIntBlockFilterV2(std::vector<char> &datablocks,
 int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       /* const */ std::vector<uint64_t> &seek_indices,
                       const rocksdb::SlicewithSchema &schema,
-                      const size_t max_results_count,
+                      const size_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys,
                       std::vector<rocksdb::PinnableSlice> &results);
 
 int recordAsyncFilter(/* const */ std::vector<char> &datablocks,

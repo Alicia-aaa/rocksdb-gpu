@@ -42,6 +42,7 @@ struct FilterContext {
   long _pivot;
   int str_num;
   char cpivot[10][32];
+  long long pivots[10];
 
   std::string toString() const {
     std::stringstream ss;

@@ -17,7 +17,44 @@
 
 
 namespace accelerator {
+    
+inline const unsigned char *skip_trailing_space(const unsigned char *ptr, size_t len) {
+  const unsigned char *end= ptr + len;
 
+  if (len > 20)
+  {
+    const unsigned char *end_words= (const unsigned char *)(long)
+      (((unsigned long long int)(long)end) / 4 * 4);
+    const unsigned char *start_words= (const unsigned char *)(long)
+       ((((unsigned long long int)(long)ptr) + 4 - 1) / 4 * 4);
+    
+    if (end_words > ptr)
+    {
+      while (end > end_words && end[-1] == 0x20)
+        end--;
+      if (end[-1] == 0x20 && start_words < end_words)
+        while (end > start_words && ((unsigned *)end)[-1] == 0x20202020)
+          end -= 4;
+    }
+  }
+  while (end > ptr && end[-1] == 0x20)
+    end--;
+  return (end);
+}
+
+inline long long compute_hash(std::string const &s) {
+    const int p = 95;
+    const int m = 1e9 + 9;
+    
+    long long hash_value = 0;
+    long long p_pow = 1;
+    for (char c : s) {
+      hash_value = (hash_value + (c - 0x20 + 1) * p_pow) % m;
+      p_pow = (p_pow * p) % m;
+    }
+    return hash_value;
+}    
+    
 inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
                           const char *record_ptr) {
   int target_idx = schema_key.getTarget();
@@ -58,6 +95,14 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
     result = sint4korr(record_ptr);
   } else if (schema_key.getType(target_idx) == 4 ) {
     result = sint4korr(record_ptr);
+  } else  if (schema_key.getType(target_idx) == 254 ) {
+    const char *end = (const char *)skip_trailing_space((const unsigned char*) record_ptr, schema_key.field_length[schema_key.target_idx]);
+    size_t len = (size_t) (end - record_ptr);
+    std::string str;
+    str.assign(record_ptr + 1, len - 1);
+
+    result = compute_hash(str);
+    //std::cout << "str = " << str << " and " << result << " and  " << len << std::endl;    
   }
   // printf("[util.h][convertRecord] converted value: %ld\n", result);
   return result;

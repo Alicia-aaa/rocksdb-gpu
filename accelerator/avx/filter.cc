@@ -5,8 +5,8 @@
 #include <immintrin.h>
 #include <vector>
 
-namespace avx {
-
+namespace avx { 
+    
 int _simpleIntNativeFilter(std::vector<long> &source,
                            accelerator::FilterContext ctx,
                            std::vector<long> &results) {
@@ -323,6 +323,22 @@ int recordFilterWithKey(std::vector<rocksdb::PinnableSlice> &k_records, std::vec
         __m256i less = _mm256_xor_si256(greater, mask);
         __m256i eq = _mm256_cmpeq_epi32(sources, pivots);
         result = _mm256_or_si256(less, eq);
+        break;
+      }
+      case accelerator::NOT_EQ: {
+        __m256i eq = _mm256_cmpeq_epi32(sources, pivots);
+        result = _mm256_xor_si256(eq, mask);
+        break;
+      }
+      case accelerator::MATCH: {
+        result = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
+        for(int i = 0; i < schema_key.context.str_num; ++i) {
+          uint64_t hpivot = static_cast<uint64_t>(schema_key.context.pivots[i]);
+          __m256i hpivots = _mm256_set_epi32(
+            hpivot, hpivot, hpivot, hpivot, hpivot, hpivot, hpivot, hpivot);
+          __m256i eq = _mm256_cmpeq_epi32(sources, hpivots);
+          result = _mm256_or_si256(result, eq);
+        }
         break;
       }
       default:

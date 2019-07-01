@@ -782,7 +782,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
 
   // Copy & Initializes variables from host to device.
   block_mgr.initParams(datablocks, seek_indices);
-  block_mgr.log();
+  //block_mgr.log();
   block_mgr.registerPinnedMemory(datablocks, seek_indices, *copied_schema);
   // ----------------------------------------------
   // Cuda Stream Pipelined (Accelerate)

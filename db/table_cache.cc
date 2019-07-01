@@ -517,146 +517,212 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
   return s;
 }
 
-Status _ValueFilterGPU(const ReadOptions& options,
+//Status _ValueFilterGPU(const ReadOptions& options,
+//                       const Slice& k, const SlicewithSchema& schema_k,
+//                       GetContext* get_context,
+//                       std::vector<TableReader *> readers,
+//                       std::vector<bool> reader_skip_filters,
+//                       const SliceTransform *prefix_extractor) {
+////  std::cout << "[TableCache::_ValueFilterGPU] # of Reader: " << readers.size()
+////      << std::endl;
+//
+//  clock_t begin, end;
+//  // Splits readers by GPU-loadable size.
+//  uint64_t gpu_loadable_size = 3ULL << 30; // 4GB
+//
+//  // Collect datablocks & seek_indices from SST files.
+//  std::vector<std::vector<char>> datablocks_batch(1);
+//  std::vector<std::vector<uint64_t>> seek_indices_batch(1);
+//  std::vector<uint64_t> total_entries_batch = { 0ULL };
+//  begin = clock();
+//  
+//  for (auto reader : readers) {
+//    auto& datablocks = datablocks_batch.back();
+//    auto& seek_indices = seek_indices_batch.back();
+//    auto& total_entries = total_entries_batch.back();
+//
+//    uint64_t seek_indices_start_offset = datablocks.size();
+//    reader->GetDataBlocks(
+//        options, datablocks, seek_indices, seek_indices_start_offset);
+////    reader->GetFilteredDataBlocks(
+////        options, datablocks, seek_indices, seek_indices_start_offset, get_context);
+//    total_entries += reader->GetTableProperties()->num_entries;
+//
+//    uint64_t load_size =
+//        datablocks.size() + (sizeof(uint64_t) * seek_indices.size());
+//
+////    std::cout << "[TableCache::_ValueFilterGPU] Batch #" << datablocks_batch.size() << std::endl
+////        << "Datablocks count: " << datablocks.size() << std::endl
+////        << "Seekindices count: " << seek_indices.size() << std::endl
+////        << "total entries: " << total_entries << std::endl
+////        << "Batch size: " << load_size << std::endl;
+//
+//    if (load_size > gpu_loadable_size) {
+//      datablocks_batch.emplace_back(std::vector<char>());
+//      seek_indices_batch.emplace_back(std::vector<uint64_t>());
+//      total_entries_batch.push_back(0);
+//    }
+//  }
+//    end = clock();
+//    
+//
+////  for (size_t i = 0; i < datablocks_batch.size(); ++i) {
+////    auto& datablocks = datablocks_batch[i];
+////    auto& seek_indices = seek_indices_batch[i];
+////    auto& total_entries = total_entries_batch[i];
+////    std::cout << "[TableCache::_ValueFilterGPU] Batch #" << datablocks_batch.size() << std::endl
+////    << "Datablocks count: " << datablocks.size() << std::endl
+////    << "Seekindices count: " << seek_indices.size() << std::endl
+////    << "total entries: " << total_entries << std::endl;
+////  }
+//    
+//    std::cout << " elapsed time in fetch blocks = " << ((end-begin)/CLOCKS_PER_SEC) << std::endl;
+////  std::cout << "[TableCache::_ValueFilterGPU] # of batches: " << datablocks_batch.size() << std::endl;
+//
+//    begin = clock();
+//    
+//
+//  for (size_t i = 0; i < datablocks_batch.size(); ++i) {
+//    auto& datablocks = datablocks_batch[i];
+//    auto& seek_indices = seek_indices_batch[i];
+//    auto& total_entries = total_entries_batch[i];
+//
+//    if (seek_indices.size() < options.threshold_seek_indices_size) {
+//      return _ValueFilterAVX(
+//          options, k, schema_k, get_context, readers, reader_skip_filters,
+//          prefix_extractor);        
+//    }
+//
+//    int err = ruda::recordBlockFilter(
+//        datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
+//        *get_context->val_ptr());
+//    
+//    std::cout << "[RudaRecordBlockManager][translatePairsToSlices] values num : " << (*get_context->val_ptr()).size() << std::endl;
+//    if (err == accelerator::ACC_ERR) {
+//      return Status::Aborted();
+//    }
+//  }
+//    
+//    end = clock();
+//    std::cout << " elapsed time in processing = " << ((end-begin)/CLOCKS_PER_SEC) << std::endl;
+//    std::cout << " end " << std::endl;
+//    
+//  // // Splits readers by GPU-loadable size.
+//  // uint64_t gpu_loadable_size = 2ULL << 30; // 2GB
+//  // std::vector<std::vector<TableReader *>> reader_batches(1);
+//  // uint64_t load_size = 0;
+//  // for (auto reader : readers) {
+//  //   uint64_t size = reader->GetTableProperties()->data_size;
+//  //   load_size += size;
+//  //   if (load_size > gpu_loadable_size) {
+//  //     reader_batches.emplace_back(std::vector<TableReader *>());
+//  //     load_size = size;
+//  //   }
+//  //   reader_batches.back().push_back(reader);
+//  // }
+//
+//  // size_t num = 0;
+//  // for (auto& reader_batch : reader_batches) {
+//  //   std::cout << "[TableCache::_ValueFilterGPU] Reader batch #" << num++
+//  //       << std::endl;
+//  //   // Collect datablocks & seek_indices from SST files.
+//  //   std::vector<char> datablocks;
+//  //   std::vector<uint64_t> seek_indices;
+//  //   uint64_t total_entries = 0;
+//  //   for (auto reader : reader_batch) {
+//  //     uint64_t seek_indices_start_offset = datablocks.size();
+//  //     reader->GetDataBlocks(
+//  //         options, datablocks, seek_indices, seek_indices_start_offset);
+//  //     total_entries += reader->GetTableProperties()->num_entries;
+//  //   }
+//
+//  //   std::cout << "[TableCache::_ValueFilterGPU] datablocks size: "
+//  //       << datablocks.size()
+//  //       << std::endl
+//  //       << "[TableCache::_ValueFilterGPU] seek_indices size: "
+//  //       << seek_indices.size()
+//  //       << std::endl;
+//
+//  //   if (seek_indices.size() < options.threshold_seek_indices_size) {
+//  //     return _ValueFilterAVX(
+//  //         options, k, schema_k, get_context, readers, reader_skip_filters,
+//  //         prefix_extractor);
+//  //   }
+//
+//  //   int err = ruda::recordBlockFilter(
+//  //       datablocks, seek_indices, schema_k, total_entries,
+//  //       *get_context->val_ptr());
+//  //   if (err == accelerator::ACC_ERR) {
+//  //     return Status::Aborted();
+//  //   }
+//  // }
+//
+//  return Status::OK();
+//}
+
+Status TableCache::_ValueFilterGPU(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
                        std::vector<TableReader *> readers,
                        std::vector<bool> reader_skip_filters,
                        const SliceTransform *prefix_extractor) {
-//  std::cout << "[TableCache::_ValueFilterGPU] # of Reader: " << readers.size()
-//      << std::endl;
 
-  clock_t begin, end;
   // Splits readers by GPU-loadable size.
-  uint64_t gpu_loadable_size = 3ULL << 30; // 4GB
+  uint64_t gpu_loadable_size = 3ULL << 30; // 3GB 
+ 
+  if (!datablocks_batch.size()) {
+    datablocks_batch.emplace_back(std::vector<char>());
+    seek_indices_batch.emplace_back(std::vector<uint64_t>());
+    total_entries_batch.push_back(0);  
+    
+    for (auto reader : readers) {
+      auto& datablocks = datablocks_batch.back();
+      auto& seek_indices = seek_indices_batch.back();
+      auto& total_entries = total_entries_batch.back();
 
-  // Collect datablocks & seek_indices from SST files.
-  std::vector<std::vector<char>> datablocks_batch(1);
-  std::vector<std::vector<uint64_t>> seek_indices_batch(1);
-  std::vector<uint64_t> total_entries_batch = { 0ULL };
-  begin = clock();
+      uint64_t seek_indices_start_offset = datablocks.size();
+      reader->GetDataBlocks(
+          options, datablocks, seek_indices, seek_indices_start_offset);
+
+      total_entries += reader->GetTableProperties()->num_entries;
+
+      uint64_t load_size =
+          datablocks.size() + (sizeof(uint64_t) * seek_indices.size());
+
+      if (load_size > gpu_loadable_size) {
+        datablocks_batch.emplace_back(std::vector<char>());
+        seek_indices_batch.emplace_back(std::vector<uint64_t>());
+        total_entries_batch.push_back(0);
+      }
+    }          
+  } 
   
-  for (auto reader : readers) {
-    auto& datablocks = datablocks_batch.back();
-    auto& seek_indices = seek_indices_batch.back();
-    auto& total_entries = total_entries_batch.back();
+  auto& datablocks = datablocks_batch.back();
+  auto& seek_indices = seek_indices_batch.back();
+  auto& total_entries = total_entries_batch.back();
 
-    uint64_t seek_indices_start_offset = datablocks.size();
-    reader->GetDataBlocks(
-        options, datablocks, seek_indices, seek_indices_start_offset);
-//    reader->GetFilteredDataBlocks(
-//        options, datablocks, seek_indices, seek_indices_start_offset, get_context);
-    total_entries += reader->GetTableProperties()->num_entries;
-
-    uint64_t load_size =
-        datablocks.size() + (sizeof(uint64_t) * seek_indices.size());
-
-//    std::cout << "[TableCache::_ValueFilterGPU] Batch #" << datablocks_batch.size() << std::endl
-//        << "Datablocks count: " << datablocks.size() << std::endl
-//        << "Seekindices count: " << seek_indices.size() << std::endl
-//        << "total entries: " << total_entries << std::endl
-//        << "Batch size: " << load_size << std::endl;
-
-    if (load_size > gpu_loadable_size) {
-      datablocks_batch.emplace_back(std::vector<char>());
-      seek_indices_batch.emplace_back(std::vector<uint64_t>());
-      total_entries_batch.push_back(0);
-    }
+  if (seek_indices.size() < options.threshold_seek_indices_size) {
+    return _ValueFilterAVX(
+        options, k, schema_k, get_context, readers, reader_skip_filters,
+        prefix_extractor);        
   }
-    end = clock();
+
+  int err = ruda::recordBlockFilter(
+      datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
+      *get_context->val_ptr());
     
-
-//  for (size_t i = 0; i < datablocks_batch.size(); ++i) {
-//    auto& datablocks = datablocks_batch[i];
-//    auto& seek_indices = seek_indices_batch[i];
-//    auto& total_entries = total_entries_batch[i];
-//    std::cout << "[TableCache::_ValueFilterGPU] Batch #" << datablocks_batch.size() << std::endl
-//    << "Datablocks count: " << datablocks.size() << std::endl
-//    << "Seekindices count: " << seek_indices.size() << std::endl
-//    << "total entries: " << total_entries << std::endl;
-//  }
+  datablocks_batch.pop_back();
+  seek_indices_batch.pop_back();
+  total_entries_batch.pop_back();
     
-    std::cout << " elapsed time in fetch blocks = " << ((end-begin)/CLOCKS_PER_SEC) << std::endl;
-//  std::cout << "[TableCache::_ValueFilterGPU] # of batches: " << datablocks_batch.size() << std::endl;
-
-    begin = clock();
-    
-
-  for (size_t i = 0; i < datablocks_batch.size(); ++i) {
-    auto& datablocks = datablocks_batch[i];
-    auto& seek_indices = seek_indices_batch[i];
-    auto& total_entries = total_entries_batch[i];
-
-    if (seek_indices.size() < options.threshold_seek_indices_size) {
-      return _ValueFilterAVX(
-          options, k, schema_k, get_context, readers, reader_skip_filters,
-          prefix_extractor);        
-    }
-
-    int err = ruda::recordBlockFilter(
-        datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
-        *get_context->val_ptr());
-    
-    std::cout << "[RudaRecordBlockManager][translatePairsToSlices] values num : " << (*get_context->val_ptr()).size() << std::endl;
-    if (err == accelerator::ACC_ERR) {
-      return Status::Aborted();
-    }
-  }
-    
-    end = clock();
-    std::cout << " elapsed time in processing = " << ((end-begin)/CLOCKS_PER_SEC) << std::endl;
-    std::cout << " end " << std::endl;
-    
-  // // Splits readers by GPU-loadable size.
-  // uint64_t gpu_loadable_size = 2ULL << 30; // 2GB
-  // std::vector<std::vector<TableReader *>> reader_batches(1);
-  // uint64_t load_size = 0;
-  // for (auto reader : readers) {
-  //   uint64_t size = reader->GetTableProperties()->data_size;
-  //   load_size += size;
-  //   if (load_size > gpu_loadable_size) {
-  //     reader_batches.emplace_back(std::vector<TableReader *>());
-  //     load_size = size;
-  //   }
-  //   reader_batches.back().push_back(reader);
-  // }
-
-  // size_t num = 0;
-  // for (auto& reader_batch : reader_batches) {
-  //   std::cout << "[TableCache::_ValueFilterGPU] Reader batch #" << num++
-  //       << std::endl;
-  //   // Collect datablocks & seek_indices from SST files.
-  //   std::vector<char> datablocks;
-  //   std::vector<uint64_t> seek_indices;
-  //   uint64_t total_entries = 0;
-  //   for (auto reader : reader_batch) {
-  //     uint64_t seek_indices_start_offset = datablocks.size();
-  //     reader->GetDataBlocks(
-  //         options, datablocks, seek_indices, seek_indices_start_offset);
-  //     total_entries += reader->GetTableProperties()->num_entries;
-  //   }
-
-  //   std::cout << "[TableCache::_ValueFilterGPU] datablocks size: "
-  //       << datablocks.size()
-  //       << std::endl
-  //       << "[TableCache::_ValueFilterGPU] seek_indices size: "
-  //       << seek_indices.size()
-  //       << std::endl;
-
-  //   if (seek_indices.size() < options.threshold_seek_indices_size) {
-  //     return _ValueFilterAVX(
-  //         options, k, schema_k, get_context, readers, reader_skip_filters,
-  //         prefix_extractor);
-  //   }
-
-  //   int err = ruda::recordBlockFilter(
-  //       datablocks, seek_indices, schema_k, total_entries,
-  //       *get_context->val_ptr());
-  //   if (err == accelerator::ACC_ERR) {
-  //     return Status::Aborted();
-  //   }
-  // }
-
+  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] values num : " << (*get_context->val_ptr()).size() << std::endl;
+  if (err == accelerator::ACC_ERR) {
+    return Status::Aborted();
+  }     
+  
+  
+  if (!datablocks_batch.size()) return Status::TableEnd();
+      
   return Status::OK();
 }
 

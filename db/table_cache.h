@@ -107,7 +107,14 @@ class TableCache {
                      std::vector<HistogramImpl *>& fd_read_hists,
                      std::vector<bool>& fd_skip_filters,
                      std::vector<int>& fd_levels);
-
+  
+  Status _ValueFilterGPU(const ReadOptions& options,
+                       const Slice& k, const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       std::vector<TableReader *> readers,
+                       std::vector<bool> reader_skip_filters,
+                       const SliceTransform *prefix_extractor);
+  
   Status AsyncFilter(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,
                      int join_idx,
@@ -175,6 +182,9 @@ class TableCache {
       immortal_tables_ = true;
     }
   }
+ std::vector<std::vector<char>> datablocks_batch;
+ std::vector<std::vector<uint64_t>> seek_indices_batch;
+ std::vector<uint64_t> total_entries_batch; 
 
  private:
   // Build a table reader
@@ -194,6 +204,7 @@ class TableCache {
   Cache* const cache_;
   std::string row_cache_id_;
   bool immortal_tables_;
+ 
 };
 
 }  // namespace rocksdb

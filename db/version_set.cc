@@ -1346,49 +1346,6 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
   }
 }
 
-void Version::ValueFilter(const ReadOptions& read_options,
-                          const LookupKey& k, const SlicewithSchema& schema_k,
-                          std::vector<PinnableSlice> &keys,
-                          std::vector<PinnableSlice> &value, Status* status,
-                          MergeContext* merge_context,
-                          SequenceNumber* max_covering_tombstone_seq,
-                          bool* value_found, bool* key_exists,
-                          SequenceNumber* seq, ReadCallback* callback,
-                          bool* is_blob) {
-  Slice ikey = k.internal_key();
-  Slice user_key = k.user_key();
-
-  assert(status->ok() || status->IsMergeInProgress());
-
-  if (key_exists != nullptr) {
-    // will falsify below if not found
-    *key_exists = true;
-  }
-
-  PinnedIteratorsManager pinned_iters_mgr;
-  GetContext get_context(
-      user_comparator(), merge_operator_, info_log_, db_statistics_,
-      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
-      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
-      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
-
-  // Pin blocks that we read to hold merge operands
-  if (merge_operator_) {
-    pinned_iters_mgr.StartPinning();
-  }
-
-  FilePicker fp(
-      storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
-      storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
-      user_comparator(), internal_comparator());
-
-  FdWithKeyRange* f = fp.GetNextFileWithTable();
-
-  std::vector<FdWithKeyRange *> table_related_files_;
-  std::vector<HistogramImpl *> fd_read_hists;
-  std::vector<bool> fd_skip_filters;
-  std::vector<int> fd_levels;
-
    /* Implementation of entire traversal to search MetaData
    *
    */
@@ -1424,6 +1381,50 @@ void Version::ValueFilter(const ReadOptions& read_options,
 //    }
 //  }
 
+void Version::ValueFilter(const ReadOptions& read_options,
+                          const LookupKey& k, const SlicewithSchema& schema_k,
+                          std::vector<PinnableSlice> &keys,
+                          std::vector<PinnableSlice> &value, Status* status,
+                          MergeContext* merge_context,
+                          SequenceNumber* max_covering_tombstone_seq,
+                          bool* value_found, bool* key_exists,
+                          SequenceNumber* seq, ReadCallback* callback,
+                          bool* is_blob) {
+  Slice ikey = k.internal_key();
+  Slice user_key = k.user_key();
+
+  assert(status->ok() || status->IsMergeInProgress());
+
+  if (key_exists != nullptr) {
+    // will falsify below if not found
+    *key_exists = true;
+  }
+
+  PinnedIteratorsManager pinned_iters_mgr;
+  GetContext get_context(
+      user_comparator(), merge_operator_, info_log_, db_statistics_,
+      status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
+      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
+      seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
+
+  // Pin blocks that we read to hold merge operands
+  if (merge_operator_) {
+    pinned_iters_mgr.StartPinning();
+  }
+
+  std::vector<FdWithKeyRange *> table_related_files_;
+  std::vector<HistogramImpl *> fd_read_hists;
+  std::vector<bool> fd_skip_filters;
+  std::vector<int> fd_levels;
+  
+  if (!table_cache_->datablocks_batch.size()) {
+    FilePicker fp(
+        storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
+        storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
+        user_comparator(), internal_comparator());
+
+    FdWithKeyRange* f = fp.GetNextFileWithTable();
+
     while (f != nullptr) {
       if (*max_covering_tombstone_seq > 0) {
         // The remaining files we look at will only contain covered keys, so we
@@ -1432,8 +1433,8 @@ void Version::ValueFilter(const ReadOptions& read_options,
       }
 
       bool timer_enabled =
-          GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
-          get_perf_context()->per_level_perf_context_enabled;
+        GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
+        get_perf_context()->per_level_perf_context_enabled;
       StopWatchNano timer(env_, timer_enabled /* auto_start */);
       // TODO: examine the behavior for corrupted key
       if (timer_enabled) {
@@ -1445,11 +1446,12 @@ void Version::ValueFilter(const ReadOptions& read_options,
           cfd_->internal_stats()->GetFileReadHist(fp.GetHitFileLevel()));
       fd_skip_filters.push_back(
           IsFilterSkipped(static_cast<int>(fp.GetHitFileLevel()),
-                          fp.IsHitFileLastInLevel()));
+                            fp.IsHitFileLastInLevel()));
       fd_levels.push_back(fp.GetCurrentLevel());
       table_related_files_.push_back(f);
       f = fp.GetNextFileWithTable();
     }
+  }
 
   *status = Status::NotFound(); // Use an empty error message for speed
   *status = table_cache_->ValueFilter(

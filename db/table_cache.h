@@ -111,8 +111,6 @@ class TableCache {
   Status _ValueFilterGPU(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       std::vector<TableReader *> readers,
-                       std::vector<bool> reader_skip_filters,
                        const SliceTransform *prefix_extractor);
   
   Status AsyncFilter(const ReadOptions& options,
@@ -182,10 +180,10 @@ class TableCache {
       immortal_tables_ = true;
     }
   }
- std::vector<std::vector<char>> datablocks_batch;
- std::vector<std::vector<uint64_t>> seek_indices_batch;
- std::vector<uint64_t> total_entries_batch; 
-
+ 
+ std::vector<TableReader *> readers;
+ std::vector<bool> reader_skip_filters;
+  
  private:
   // Build a table reader
   Status GetTableReader(const EnvOptions& env_options,

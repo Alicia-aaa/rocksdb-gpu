@@ -93,8 +93,8 @@ TEST_F(SstFileReaderTest, Uint64Comparator) {
 // Testing CUDA link availability.
 TEST_F(SstFileReaderTest, CudaSstValueFilter) {
   accelerator::FilterContext ctx = { accelerator::EQ, 5 };
-  std::vector<int> values{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-  std::vector<int> results;
+  std::vector<long> values{ 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L };
+  std::vector<long> results;
 
   ruda::sstThrustFilter(values, ctx, results);
   for (size_t i = 0; i < results.size(); ++i) {

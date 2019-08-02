@@ -663,46 +663,55 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
 Status TableCache::_ValueFilterGPU(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       std::vector<TableReader *> readers,
-                       std::vector<bool> reader_skip_filters,
                        const SliceTransform *prefix_extractor) {
 
+    /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
   uint64_t gpu_loadable_size = 3ULL << 30; // 3GB 
  
-  if (!datablocks_batch.size()) {
-    datablocks_batch.emplace_back(std::vector<char>());
-    seek_indices_batch.emplace_back(std::vector<uint64_t>());
-    total_entries_batch.push_back(0);  
+  std::cout << " reader size  : " << readers.size() << std::endl;
+  
+  if(!readers.size()) return Status::NotFound();
+  
+  std::vector<std::vector<char>> datablocks_batch;
+  std::vector<std::vector<uint64_t>> seek_indices_batch;
+  std::vector<uint64_t> total_entries_batch; 
+  
+  datablocks_batch.emplace_back(std::vector<char>());
+  seek_indices_batch.emplace_back(std::vector<uint64_t>());
+  total_entries_batch.push_back(0);
     
-    for (auto reader : readers) {
+  while(readers.size()) {
       auto& datablocks = datablocks_batch.back();
       auto& seek_indices = seek_indices_batch.back();
       auto& total_entries = total_entries_batch.back();
+      
+      auto reader = readers.back();
 
       uint64_t seek_indices_start_offset = datablocks.size();
       reader->GetDataBlocks(
           options, datablocks, seek_indices, seek_indices_start_offset);
 
       total_entries += reader->GetTableProperties()->num_entries;
-
       uint64_t load_size =
-          datablocks.size() + (sizeof(uint64_t) * seek_indices.size());
+          datablocks.size() + (sizeof(uint64_t) * seek_indices.size());  
+      readers.pop_back();  
+      reader_skip_filters.pop_back();
 
       if (load_size > gpu_loadable_size) {
-        datablocks_batch.emplace_back(std::vector<char>());
-        seek_indices_batch.emplace_back(std::vector<uint64_t>());
-        total_entries_batch.push_back(0);
+          break;
       }
-    }          
-  } 
+  }          
   
   auto& datablocks = datablocks_batch.back();
   auto& seek_indices = seek_indices_batch.back();
   auto& total_entries = total_entries_batch.back();
-
+  
+  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] before values num : " << (*get_context->val_ptr()).size() << std::endl;
+  Status s = Status::OK();
   if (seek_indices.size() < options.threshold_seek_indices_size) {
-    return _ValueFilterAVX(
+  std::cout << " [ValueFilterAVX] called " << std::endl;
+    s = _ValueFilterAVX(
         options, k, schema_k, get_context, readers, reader_skip_filters,
         prefix_extractor);        
   }
@@ -715,15 +724,15 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   seek_indices_batch.pop_back();
   total_entries_batch.pop_back();
     
-  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] values num : " << (*get_context->val_ptr()).size() << std::endl;
+  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] after values num : " << (*get_context->val_ptr()).size() << std::endl;
   if (err == accelerator::ACC_ERR) {
     return Status::Aborted();
   }     
   
   
-  if (!datablocks_batch.size()) return Status::TableEnd();
+  if (!readers.size()) return Status::TableEnd();
       
-  return Status::OK();
+  return s;
 }
 
 Status _AsyncFilterGPU(const ReadOptions& options,
@@ -773,8 +782,8 @@ Status TableCache::ValueFilter(const ReadOptions& options,
   size_t fd_count = fds.size();
 
   std::vector<Cache::Handle *> handles;
-  std::vector<TableReader *> readers;
-  std::vector<bool> reader_skip_filters;
+//  std::vector<TableReader *> readers;
+//  std::vector<bool> reader_skip_filters;
 
   for (size_t i = 0; i < fd_count; ++i) {
     auto &fd = fds[i]->file_metadata->fd;
@@ -810,8 +819,7 @@ Status TableCache::ValueFilter(const ReadOptions& options,
     case accelerator::ValueFilterMode::GPU:
       std::cout << "[TableCache::ValueFilter] Execute GPU Filter" << std::endl;
       s = _ValueFilterGPU(
-          options, k, schema_k, get_context, readers, reader_skip_filters,
-          prefix_extractor);
+          options, k, schema_k, get_context, prefix_extractor);
       break;
     case accelerator::ValueFilterMode::AVX_BLOCK:
     case accelerator::ValueFilterMode::NORMAL:

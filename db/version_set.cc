@@ -1417,7 +1417,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
   std::vector<bool> fd_skip_filters;
   std::vector<int> fd_levels;
   
-  if (!table_cache_->datablocks_batch.size()) {
+  if (!table_cache_->readers.size()) {
     FilePicker fp(
         storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
         storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,

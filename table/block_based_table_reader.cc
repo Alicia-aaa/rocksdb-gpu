@@ -2424,11 +2424,6 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
 //  std::unique_ptr<FilePrefetchBuffer> prefetch_buffer;
 //  prefetch_buffer.reset(new FilePrefetchBuffer(rep_->file.get(), 8*1024, 256*1024));
   
-  clock_t begin, end;
-  clock_t prefetchTime = 0;
-  clock_t getBlockTime = 0;
-  clock_t vectorCopyTime = 0;
-  
   IndexBlockIter iiter_on_stack;
   auto iiter =
       NewIndexIterator(read_options,
@@ -2463,7 +2458,6 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
     
     std::unique_ptr<Block> block;
     if (s.ok()) {
-        begin = clock();
       s = ReadBlockFromFile(
           rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
           read_options, handle, &block, rep_->ioptions,
@@ -2472,8 +2466,6 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
           rep_->persistent_cache_options, rep_->global_seqno,
           rep_->table_options.read_amp_bytes_per_bit,
           GetMemoryAllocator(rep_->table_options));
-      end = clock();
-      getBlockTime += (end - begin);
     }
     
     if (s.ok()) {
@@ -2508,14 +2500,11 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
 
 //      std::vector<char> vec(cstr, cstr + strlen(cstr));
       
-      begin = clock();
-      
       data.insert(data.end(), block_data, block_data + block_restart_offset);
       
 //      std::copy(
 //          block_data, block_data + block_restart_offset,
 //          std::back_inserter(data));
-      end = clock();
       
       for (size_t i = 0; i < block_num_restarts; ++i) {
         uint64_t seek_index = block.get()->GetDecodedSeekIndex(i);
@@ -2523,14 +2512,9 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
         seek_indices.push_back(seek_index);
       }
       accumulated_data_index += block_restart_offset;
-     
-      vectorCopyTime += (end - begin);
+
     }
   }
-  
-//  std::cout << " elapsed time in Prefetch = " << (prefetchTime/CLOCKS_PER_SEC) << std::endl;
-//  std::cout << " elapsed time in getBlock = " << (getBlockTime/CLOCKS_PER_SEC) << std::endl;
-//  std::cout << " elapsed time in vectorCopy = " << (vectorCopyTime/CLOCKS_PER_SEC) << std::endl;
 
   return s;
 }
@@ -2827,6 +2811,7 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
 
     bool done = false;
     std::vector<Slice> records;
+    std::vector<PinnableSlice> k_records;
 
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
@@ -2883,6 +2868,7 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
           break;
         }
 
+        k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         records.emplace_back(biter.value().data_, biter.value().size_);
 //        std::cout << "[BlockBasedTable::AvxFilter] Data: "
 //            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
@@ -2898,14 +2884,18 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
 
     if (schema_key.getTarget() != -1) {
       //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-      avx::recordFilter(
-          records, schema_key, *get_context->val_ptr());
+      avx::recordFilterWithKey(k_records,
+          records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
     } else {
       //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
-      for (auto &record : records) {
-        get_context->val_ptr()->emplace_back(
-            std::move(PinnableSlice(record.data_, record.size_)));
-      }
+//      for (auto &record : records) {
+//        get_context->val_ptr()->emplace_back(
+//            std::move(PinnableSlice(record.data_, record.size_)));
+//      }
+      for(uint i = 0; i < k_records.size(); i++) {
+          get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
+          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
+      }    
     }
 //    for (auto &result : *get_context->val_ptr()) {
 //      //long col_value = accelerator::convertRecord(schema_key, result.data_);

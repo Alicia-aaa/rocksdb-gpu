@@ -144,7 +144,7 @@ class GetContext {
   void ReportCounters();
   
   std::vector<PinnableSlice> *keys_ptr() {
-      return keys;
+      return keys_;
   }
 
   std::vector<PinnableSlice> *val_ptr() {
@@ -165,7 +165,7 @@ class GetContext {
   GetState state_;
   Slice user_key_;
   PinnableSlice* pinnable_val_;
-  std::vector<PinnableSlice> *keys;
+  std::vector<PinnableSlice> *keys_;
   std::vector<PinnableSlice> *values;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
   MergeContext* merge_context_;

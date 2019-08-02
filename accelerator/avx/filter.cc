@@ -332,8 +332,8 @@ int recordFilterWithKey(std::vector<rocksdb::PinnableSlice> &k_records, std::vec
       }
       case accelerator::MATCH: {
         result = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
-        for(int i = 0; i < schema_key.context.str_num; ++i) {
-          uint64_t hpivot = static_cast<uint64_t>(schema_key.context.pivots[i]);
+        for(int k = 0; k < schema_key.context.str_num; ++k) {
+          uint64_t hpivot = static_cast<uint64_t>(schema_key.context.pivots[k]);
           __m256i hpivots = _mm256_set_epi32(
             hpivot, hpivot, hpivot, hpivot, hpivot, hpivot, hpivot, hpivot);
           __m256i eq = _mm256_cmpeq_epi32(sources, hpivots);

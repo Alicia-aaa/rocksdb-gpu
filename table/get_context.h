@@ -94,7 +94,7 @@ class GetContext {
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
-
+  
   void MarkKeyMayExist();
 
   // Records this key, value, and any meta-data (such as sequence number and
@@ -150,7 +150,7 @@ class GetContext {
   std::vector<PinnableSlice> *val_ptr() {
 	  return values;
   }
-
+  
   Slice *key_ptr() {
       return key_to_find;
   }

@@ -1441,7 +1441,12 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                   &merge_context, &max_covering_tombstone_seq,
                                   join_idx, value_found, nullptr, nullptr,
                                   callback, is_blob_index);
-  } else {
+  } else if (read_options.value_filter_mode == accelerator::ValueFilterMode::DONARD) {
+    sv->current->donardFilter(read_options, lkey, key, keys, pinnable_val, &s,
+                              &merge_context, &max_covering_tombstone_seq,
+                              value_found, nullptr, nullptr, callback,
+                              is_blob_index);
+  } else  {
     std::cout << "ValueFilter Called " << std::endl;
     sv->current->ValueFilter(read_options, lkey, key, keys, pinnable_val, &s,
                               &merge_context, &max_covering_tombstone_seq,

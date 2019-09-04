@@ -12,7 +12,9 @@
 #include <iostream>
 #include <thread>
 #include <time.h>
-
+extern "C" {
+#include <pinpool.h>
+}
 #include "db/dbformat.h"
 #include "db/range_tombstone_fragmenter.h"
 #include "db/version_edit.h"
@@ -32,6 +34,7 @@
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
 #include "accelerator/cuda/async_manager.h"
+#include "table/block_based_table_reader.h"
 
 namespace rocksdb {
 
@@ -667,7 +670,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
 
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
-  uint64_t gpu_loadable_size = 3ULL << 30; // 3GB 
+  uint64_t gpu_loadable_size = 13ULL << 30; // 3GB 
  
   std::cout << " reader size  : " << readers.size() << std::endl;
   
@@ -735,6 +738,77 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   return s;
 }
 
+Status TableCache::_ValueFilterDonard(const ReadOptions& options,
+                       const Slice& /*k*/, const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       const SliceTransform */*prefix_extractor*/) {
+
+    /* TODO : Partial Processing */
+  // Splits readers by GPU-loadable size.
+  uint64_t gpu_loadable_size = 13ULL << 30; // 13GB 
+ 
+  std::cout << " fileList size  : " << fileList.size() << std::endl;
+  
+    // Pin Memory for DMA 
+  if(!fileList.size()) return Status::NotFound();
+  std::vector<std::string> file_input;
+  std::vector<uint64_t> num_blocks;
+
+  uint64_t load_size = 0;
+  uint64_t total_blocks = 0;
+  uint64_t total_entries = 0;
+  std::vector<uint64_t> handles;
+  
+  while(fileList.size()) {    
+      auto file = fileList.back();
+      auto reader = readers.back();
+      file_input.push_back(file);
+      uint64_t blocks = reader->GetTableProperties().get()->num_data_blocks;
+      reader->GetBlockHandles(options, handles);    
+           
+      num_blocks.push_back(total_blocks + blocks);
+      total_blocks += blocks;
+      total_entries += reader->GetTableProperties().get()->num_entries;
+
+      /* assume file size is 64 MB (default option) */
+      load_size += 64 * 1024 * 1024;
+
+      fileList.pop_back();
+      readers.pop_back();
+
+      if (load_size > gpu_loadable_size) {
+          break;
+      }
+  }
+
+  Status s = Status::OK();
+  /* Is it neccessary ?
+  if (seek_indices.size() < options.threshold_seek_indices_size) {
+  std::cout << " [ValueFilterAVX] called " << std::endl;
+    s = _ValueFilterAVX(
+        options, k, schema_k, get_context, readers, reader_skip_filters,
+        prefix_extractor);        
+  }
+  */
+//  for(uint i = 0; i < handles.size(); i++) std::cout << " handle === " << handles[i] << std::endl;
+  std::cout << " handles size = " << handles.size() << std::endl;
+  std::cout << " block num = " << num_blocks.back() << std::endl;
+
+  int err = ruda::donardFilter(file_input, num_blocks, handles, schema_k, total_entries, *get_context->keys_ptr(), *get_context->val_ptr());
+
+
+  file_input.clear();
+  if (err == accelerator::ACC_ERR) {
+    return Status::Aborted();
+  }      
+  
+  if (!fileList.size()) {
+    //pinpool_deinit();
+    return Status::TableEnd();
+  }  
+  return s;
+}
+
 Status _AsyncFilterGPU(const ReadOptions& options,
                        int join_idx,
                        GetContext* get_context,
@@ -770,20 +844,17 @@ Status _AsyncFilterGPU(const ReadOptions& options,
 }
 
 Status TableCache::ValueFilter(const ReadOptions& options,
-                               const InternalKeyComparator& internal_comparator,
-                               const Slice& k, const SlicewithSchema& schema_k,
-                               GetContext* get_context,
-                               const SliceTransform* prefix_extractor,
-                               std::vector<FdWithKeyRange *> fds,
-                               std::vector<HistogramImpl *> fd_read_hists,
-                               std::vector<bool> fd_skip_filters,
-                               std::vector<int> fd_levels) {
+        const InternalKeyComparator& internal_comparator,
+        const Slice& k, const SlicewithSchema& schema_k,
+        GetContext* get_context,
+        const SliceTransform* prefix_extractor,
+        std::vector<FdWithKeyRange *> fds,
+        std::vector<HistogramImpl *> fd_read_hists,
+        std::vector<bool> fd_skip_filters,
+        std::vector<int> fd_levels) {
   Status s;
   size_t fd_count = fds.size();
-
   std::vector<Cache::Handle *> handles;
-//  std::vector<TableReader *> readers;
-//  std::vector<bool> reader_skip_filters;
 
   for (size_t i = 0; i < fd_count; ++i) {
     auto &fd = fds[i]->file_metadata->fd;
@@ -794,9 +865,9 @@ Status TableCache::ValueFilter(const ReadOptions& options,
     if (t == nullptr) {
       Cache::Handle *handle = nullptr;
       s = FindTable(
-          env_options_, internal_comparator, fd, &handle, prefix_extractor,
-          options.read_tier == kBlockCacheTier /* no_io */,
-          true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
+              env_options_, internal_comparator, fd, &handle, prefix_extractor,
+              options.read_tier == kBlockCacheTier /* no_io */,
+              true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
       if (s.ok()) {
         t = GetTableReaderFromHandle(handle);
         handles.push_back(handle);
@@ -811,21 +882,67 @@ Status TableCache::ValueFilter(const ReadOptions& options,
 
   switch (options.value_filter_mode) {
     case accelerator::ValueFilterMode::AVX:
-      //std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
       s = _ValueFilterAVX(
-          options, k, schema_k, get_context, readers, reader_skip_filters,
-          prefix_extractor);
+              options, k, schema_k, get_context, readers, reader_skip_filters,
+              prefix_extractor);
       break;
     case accelerator::ValueFilterMode::GPU:
-      std::cout << "[TableCache::ValueFilter] Execute GPU Filter" << std::endl;
       s = _ValueFilterGPU(
-          options, k, schema_k, get_context, prefix_extractor);
+              options, k, schema_k, get_context, prefix_extractor);
       break;
+
     case accelerator::ValueFilterMode::AVX_BLOCK:
     case accelerator::ValueFilterMode::NORMAL:
+    case accelerator::ValueFilterMode::DONARD:
     default:
       break;
   }
+
+  for (auto handle : handles) {
+    ReleaseHandle(handle);
+  }
+  return s;
+}
+
+Status TableCache::donardFilter(const ReadOptions& options,
+        const InternalKeyComparator& internal_comparator,
+        const Slice& k, const SlicewithSchema& schema_k,
+        GetContext* get_context,
+        const SliceTransform* prefix_extractor,
+        std::vector<FdWithKeyRange *> fds,
+        std::vector<HistogramImpl *> fd_read_hists,
+        std::vector<bool> fd_skip_filters,
+        std::vector<int> fd_levels) {
+  Status s;
+  size_t fd_count = fds.size();
+  std::vector<Cache::Handle *> handles;
+
+  for (size_t i = 0; i < fd_count; ++i) {
+    auto &fd = fds[i]->file_metadata->fd;
+    HistogramImpl *fd_read_hist = fd_read_hists[i];
+    bool fd_skip_filter = fd_skip_filters[i];
+    int fd_level = fd_levels[i];
+    TableReader* t = fd.table_reader;
+    if (t == nullptr) {
+      Cache::Handle *handle = nullptr;
+      s = FindTable(
+              env_options_, internal_comparator, fd, &handle, prefix_extractor,
+              options.read_tier == kBlockCacheTier /* no_io */,
+              true /* record_read_stats */, fd_read_hist, fd_skip_filter, fd_level);
+      if (s.ok()) {
+        t = GetTableReaderFromHandle(handle);
+        handles.push_back(handle);
+        readers.push_back(t);
+        reader_skip_filters.push_back(fd_skip_filter);
+      }
+    } else {
+      readers.push_back(t);
+      reader_skip_filters.push_back(fd_skip_filter);
+    }
+  }
+
+  s = _ValueFilterDonard(
+           options, k, schema_k, get_context, prefix_extractor);
 
   for (auto handle : handles) {
     ReleaseHandle(handle);

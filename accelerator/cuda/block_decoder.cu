@@ -108,6 +108,21 @@ uint64_t DecodeFixed64(const char* ptr) {
   return (hi << 32) | lo;
 }
 
+__host__ __device__
+unsigned int getFileIdx(uint32_t blockId, uint64_t size, uint64_t *g_block_index) {
+  int start = 0;
+  int end = size - 1;
+  while ( start < end ) {
+    int mid = (start + end) / 2;
+    if(blockId <= g_block_index[mid] - 1) {
+      end = mid;
+    } else {
+      start = mid + 1;
+    }
+  }
+  return end;
+}
+
 __device__
 bool memcmp(char * left, char * right, size_t length) {
   for(int i = 0; i < length - 1; i++) {
@@ -453,6 +468,136 @@ void DecodeNFilterOnSchema(// Parameters
 //  }
 
   delete[] key_buf;
+}
+
+__device__
+void DecodeNFilterOnSchemaDonard(// Parameters
+                           const char *start_ptr,
+                           uint32_t restart_offset,
+                           uint32_t start_offset,
+                           uint32_t num_task,
+                           RudaSchema *schema,
+                           // Results
+                           uint64_t *results_size,
+                           int *results_idx,
+                           ruda::donardSlice *d_results){
+
+
+  int start = DecodeFixed32(start_ptr + start_offset);
+  int end;
+  const char *subblock = start_ptr + DecodeFixed32(start_ptr + start_offset);
+  const char *limit;
+  if( restart_offset != 0) { 
+    limit = start_ptr + restart_offset;
+    end = restart_offset;
+  } else { 
+    limit = start_ptr + DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
+    end = DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
+  }
+  //printf("subblock and limit : %p and %p and %d and %d\n", subblock, limit, *(start_ptr + restart_offset), *(start_ptr + restart_offset + num_task * sizeof(uint32_t)));
+  //printf("blockIdx = %d, threadIdx = %d, restart_offset : %d, start and limit : %d and %d\n", blockIdx.x, threadIdx.x, restart_offset, start, end);
+ 
+  size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
+  char *key_buf = new char[key_buf_size];
+ 
+  while (subblock < limit) {
+    
+    uint32_t shared, non_shared, value_size;
+    subblock = DecodeEntry()(subblock, limit, &shared, &non_shared,
+                             &value_size);
+
+    const char *key;
+    size_t key_size;
+    if (shared == 0) {
+      key = subblock;
+      key_size = non_shared;
+      if (key_size > key_buf_size) {
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new char[key_buf_size];
+      }
+      memset(key_buf, 0, sizeof(char) * key_buf_size);
+      memcpy(key_buf, key, sizeof(char) * key_size);
+      //key_buf_length = key_size;
+    } else {
+      key = subblock;
+      key_size = shared + non_shared;
+      if (key_size > key_buf_size) {
+        char *new_key_buf = new char[key_size];
+        memcpy(new_key_buf, key_buf, sizeof(char) * shared);
+        delete[] key_buf;
+        key_buf_size = key_size;
+        key_buf = new_key_buf;
+      }
+      memcpy(key_buf + shared, key, sizeof(char) * non_shared);
+      //key_buf_length = key_size;
+    }
+
+    const char *value = subblock + non_shared;
+
+    bool is_equal_to_schema = true;
+    for (size_t i = 0; i < NUM_TABLE_BYTES; ++i) {
+      if (key_buf[i] != schema->data[i]) {
+        is_equal_to_schema = false;
+        break;
+      }
+    }
+    if (!is_equal_to_schema) {
+      subblock = value + value_size;
+      continue;
+    }
+
+    char pivot[32] = {0,};
+    long decoded_value = rudaConvertRecord(schema, value, pivot);
+
+    bool filter_result = false;
+    switch (schema->ctx._op) {
+      case accelerator::EQ:
+        filter_result = decoded_value == schema->ctx._pivot;
+        break;
+      case accelerator::LESS:
+        filter_result = decoded_value < schema->ctx._pivot;
+        break;
+      case accelerator::GREATER:
+        filter_result = decoded_value > schema->ctx._pivot;
+        break;
+      case accelerator::LESS_EQ:
+        filter_result = decoded_value <= schema->ctx._pivot;
+        break;
+      case accelerator::GREATER_EQ:
+        filter_result = decoded_value >= schema->ctx._pivot;
+        break;
+      case accelerator::NOT_EQ:
+        filter_result = decoded_value != schema->ctx._pivot;
+        break;
+      case accelerator::MATCH:
+        for(int i = 0; i < schema->ctx.str_num; ++i) {
+          if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
+            filter_result = true;
+            break;
+          }  
+        }  
+        break; 
+      case accelerator::INVALID:
+        // INVALID case, return all data to result.
+        filter_result = true;
+        break;
+      default:
+        break;
+    }
+    
+    if (filter_result) {
+      unsigned long long int idx = atomicAdd(results_idx, 1);
+      //printf("idx : %d\n", idx);
+      d_results[idx] = donardSlice(value, value_size);    
+      d_results[idx].copyKey(key_buf, key_size - 8);
+      //atomicAdd(results_size, value_size + key_size - 8);      
+    }
+
+    // Next DataKey...
+    subblock = value + value_size;
+  }
+  delete[] key_buf; 
 }
 
 }  // namespace ruda

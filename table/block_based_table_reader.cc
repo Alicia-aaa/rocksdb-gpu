@@ -1793,7 +1793,6 @@ TBlockIter* BlockBasedTable::NewDataBlockIterator(
     bool index_key_is_full, GetContext* get_context, Status s,
     FilePrefetchBuffer* prefetch_buffer) {
   PERF_TIMER_GUARD(new_table_block_iter_nanos);
-
   const bool no_io = (ro.read_tier == kBlockCacheTier);
   Cache* block_cache = rep->table_options.block_cache.get();
   CachableEntry<Block> block;
@@ -2519,12 +2518,13 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
   return s;
 }
 
-Status BlockBasedTable::GetFilteredDataBlocks(const ReadOptions& read_options,
-                                      std::vector<char>& data,
-                                      std::vector<uint64_t>& seek_indices,
-                                      uint64_t seek_index_start_offset, GetContext * get_context) {
-  Status s;
+size_t BlockBasedTable::GetBlockSize() {
+  return rep_->table_options.block_size;
+}
 
+Status BlockBasedTable::GetBlockHandles(const ReadOptions& read_options, std::vector<uint64_t> &handles) {
+  Status s;
+  
   IndexBlockIter iiter_on_stack;
   auto iiter =
       NewIndexIterator(read_options,
@@ -2535,43 +2535,13 @@ Status BlockBasedTable::GetFilteredDataBlocks(const ReadOptions& read_options,
     iiter_unique_ptr.reset(iiter);
   }
 
-  uint64_t accumulated_data_index = seek_index_start_offset;
+  uint64_t accumulated_size = 0;
+
   for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
     BlockHandle handle = iiter->value();
-    
-    if(get_context->checkTableRangeSlice(Slice(iiter->key().data(), iiter->key().size() - 8))) break;
-    Slice compression_dict;
-    if (s.ok() && rep_->compression_dict_block) {
-      compression_dict = rep_->compression_dict_block->data;
-    }
-
-    std::unique_ptr<Block> block;
-    if (s.ok()) {
-      s = ReadBlockFromFile(
-          rep_->file.get(), /* prefetch_buffer */ nullptr, rep_->footer,
-          read_options, handle, &block, rep_->ioptions,
-          rep_->blocks_maybe_compressed /*do_decompress*/,
-          rep_->blocks_maybe_compressed, compression_dict,
-          rep_->persistent_cache_options, rep_->global_seqno,
-          rep_->table_options.read_amp_bytes_per_bit,
-          GetMemoryAllocator(rep_->table_options));
-    }
-    if (s.ok()) {
-      const char *block_data = block.get()->data();
-      uint32_t block_restart_offset = block.get()->restart_offset();
-      uint32_t block_num_restarts = block.get()->NumRestarts();
-
-      data.insert(data.end(), block_data, block_data + block_restart_offset);
-      
-      for (size_t i = 0; i < block_num_restarts; ++i) {
-        uint64_t seek_index = block.get()->GetDecodedSeekIndex(i);
-        seek_index += accumulated_data_index;
-        seek_indices.push_back(seek_index);
-      }
-      accumulated_data_index += block_restart_offset;
-    }
+    accumulated_size += handle.size() + 5;
+    handles.emplace_back(accumulated_size);
   }
-
   return s;
 }
 
@@ -3173,6 +3143,7 @@ Status BlockBasedTable::VerifyChecksum() {
 
 Status BlockBasedTable::VerifyChecksumInBlocks(
     InternalIteratorBase<BlockHandle>* index_iter) {
+
   Status s;
   for (index_iter->SeekToFirst(); index_iter->Valid(); index_iter->Next()) {
     s = index_iter->status();
@@ -3198,6 +3169,7 @@ Status BlockBasedTable::VerifyChecksumInBlocks(
 Status BlockBasedTable::VerifyChecksumInBlocks(
     InternalIteratorBase<Slice>* index_iter) {
   Status s;
+
   for (index_iter->SeekToFirst(); index_iter->Valid(); index_iter->Next()) {
     s = index_iter->status();
     if (!s.ok()) {

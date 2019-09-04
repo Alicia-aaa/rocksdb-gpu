@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <iostream>
 
 #include "db/table_properties_collector.h"
 #include "rocksdb/table.h"

@@ -130,7 +130,7 @@ class DBImpl : public DB {
                          bool* value_found = nullptr,
                          ReadCallback* callback = nullptr,
                          bool* is_blob_index = nullptr);
-
+  
   using DB::AsyncFilter;
   virtual Status AsyncFilter(ColumnFamilyHandle* column_family,
                              rocksdb::GPUManager *gpu_manager_) override;

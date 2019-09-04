@@ -97,6 +97,16 @@ class TableCache {
                      std::vector<HistogramImpl *> fd_read_hists,
                      std::vector<bool> fd_skip_filters,
                      std::vector<int> fd_levels);
+  
+  Status donardFilter(const ReadOptions& options,
+                     const InternalKeyComparator& internal_comparator,
+                     const Slice& k, const SlicewithSchema& schema_k,
+                     GetContext* get_context,
+                     const SliceTransform* prefix_extractor,
+                     std::vector<FdWithKeyRange *> fds,
+                     std::vector<HistogramImpl *> fd_read_hists,
+                     std::vector<bool> fd_skip_filters,
+                     std::vector<int> fd_levels);
 
   Status ValueFilterBlock(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,
@@ -109,6 +119,11 @@ class TableCache {
                      std::vector<int>& fd_levels);
   
   Status _ValueFilterGPU(const ReadOptions& options,
+                       const Slice& k, const SlicewithSchema& schema_k,
+                       GetContext* get_context,
+                       const SliceTransform *prefix_extractor);
+  
+  Status _ValueFilterDonard(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
                        const SliceTransform *prefix_extractor);
@@ -182,6 +197,7 @@ class TableCache {
   }
  
  std::vector<TableReader *> readers;
+ std::vector<std::string> fileList;
  std::vector<bool> reader_skip_filters;
   
  private:

@@ -11,6 +11,7 @@
 
 #include <string>
 #include <inttypes.h>
+#include <iostream>
 
 #include "monitoring/perf_context_imp.h"
 #include "monitoring/statistics.h"

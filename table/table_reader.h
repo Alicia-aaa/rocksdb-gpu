@@ -60,14 +60,14 @@ class TableReader {
     return Status();
   };
   
-  virtual Status GetFilteredDataBlocks(const ReadOptions&,
-                               std::vector<char>& /* data */,
-                               std::vector<uint64_t>& /* seek_indices */,
-                               uint64_t /* seek_index_start_offset */,
-                               GetContext * /*get_context*/) {
+  virtual size_t GetBlockSize() {
+    return 0;
+  };
+  
+  virtual Status GetBlockHandles(const ReadOptions&, std::vector<uint64_t> &handles) {
     return Status();
   };
-
+  
   virtual FragmentedRangeTombstoneIterator* NewRangeTombstoneIterator(
       const ReadOptions& /*read_options*/) {
     return nullptr;

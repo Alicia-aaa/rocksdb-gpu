@@ -201,7 +201,7 @@ class Transaction {
                              const SlicewithSchema& key,
                              std::vector<PinnableSlice> &keys,
                              std::vector<PinnableSlice> &pinnable_val, int join_idx) = 0;
-
+  
   virtual Status AsyncFilter(ColumnFamilyHandle* column_family,
                              rocksdb::GPUManager *gpu_manager_) = 0;
 

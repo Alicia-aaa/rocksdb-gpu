@@ -493,7 +493,8 @@ CUDA_SOURCES =          \
   accelerator/cuda/block_stream_filter.cu \
   accelerator/cuda/block_stream_filter_v2.cu \
   accelerator/cuda/block_record_filter.cu \
-  accelerator/cuda/async_record_filter.cu
+  accelerator/cuda/async_record_filter.cu \
+  accelerator/cuda/donard_filter.cu
 
 AVX_SOURCES =           \
   accelerator/avx/filter.cc

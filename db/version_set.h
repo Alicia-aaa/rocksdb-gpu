@@ -645,6 +645,16 @@ class Version {
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);
   
+  void donardFilter(const ReadOptions&, const LookupKey& key,
+                   const SlicewithSchema& schema_key,
+                   std::vector<PinnableSlice> &keys,
+                   std::vector<PinnableSlice> &value, Status* status,
+                   MergeContext* merge_context,
+                   SequenceNumber* max_covering_tombstone_seq,
+                   bool* value_found = nullptr, bool* key_exists = nullptr,
+                   SequenceNumber* seq = nullptr,
+                   ReadCallback* callback = nullptr, bool* is_blob = nullptr);
+  
   void ValueFilterBlock(const ReadOptions&, const LookupKey& key,
                    const SlicewithSchema& schema_key,
                    std::vector<PinnableSlice> &keys,

@@ -223,6 +223,27 @@ class RudaKVIndexPair {
   size_t key_size;
 };
 
+class donardSlice {
+ public:
+  // Create an empty slice.
+  __host__ __device__
+  donardSlice(const char* d, size_t n) {
+    d_data = d;
+    d_size = n;
+  }
+  
+  __device__
+  void copyKey(char * key_src, size_t key_size_) {
+    key_size = key_size_;
+    memcpy(key, key_src, sizeof(char) * key_size);  
+  }
+  
+  char key[32];
+  size_t key_size;
+  const char* d_data;
+  size_t d_size;
+};
+
 // GPU-accessable Schema
 // Copy class of SlicewithSchema
 class RudaSchema {
@@ -290,6 +311,10 @@ class RudaSchema {
 
 __host__ __device__
 uint64_t DecodeFixed64(const char* ptr);
+__host__ __device__
+uint32_t DecodeFixed32(const char* ptr);
+__host__ __device__
+unsigned int getFileIdx(uint32_t blockId, uint64_t size, uint64_t *g_block_index);
 
 __device__
 void DecodeNFilterSubDataBlocks(// Parameters
@@ -326,4 +351,17 @@ void DecodeNFilterOnSchema(// Parameters
                            // Results
                            unsigned long long int *results_idx,
                            RudaKVIndexPair *results);
+
+
+__device__
+void DecodeNFilterOnSchemaDonard(// Parameters
+                           const char *start_ptr,
+                           uint32_t restart_offset,
+                           uint32_t start_offset,
+                           uint32_t num_task,
+                           RudaSchema *schema,
+                           // Results
+                           uint64_t *results_size,
+                           int *results_idx,
+                           donardSlice *d_results);
 }  // namespace ruda

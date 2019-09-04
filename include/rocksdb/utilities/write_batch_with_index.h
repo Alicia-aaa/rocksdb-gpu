@@ -214,7 +214,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
                                    const SlicewithSchema& key,
                                    std::vector<PinnableSlice> &keys,
                                    std::vector<PinnableSlice>& values, int join_idx);
-
+  
   Status AsyncFilterFromBatchAndDB(DB* db, ColumnFamilyHandle* column_family,
                                    rocksdb::GPUManager *gpu_manager_);
 

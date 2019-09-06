@@ -478,8 +478,7 @@ void DecodeNFilterOnSchemaDonard(// Parameters
                            uint32_t num_task,
                            RudaSchema *schema,
                            // Results
-                           uint64_t *results_size,
-                           int *results_idx,
+                           unsigned long long int *results_idx,
                            ruda::donardSlice *d_results){
 
 
@@ -494,8 +493,6 @@ void DecodeNFilterOnSchemaDonard(// Parameters
     limit = start_ptr + DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
     end = DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
   }
-  //printf("subblock and limit : %p and %p and %d and %d\n", subblock, limit, *(start_ptr + restart_offset), *(start_ptr + restart_offset + num_task * sizeof(uint32_t)));
-  //printf("blockIdx = %d, threadIdx = %d, restart_offset : %d, start and limit : %d and %d\n", blockIdx.x, threadIdx.x, restart_offset, start, end);
  
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;
   char *key_buf = new char[key_buf_size];
@@ -590,8 +587,7 @@ void DecodeNFilterOnSchemaDonard(// Parameters
       unsigned long long int idx = atomicAdd(results_idx, 1);
       //printf("idx : %d\n", idx);
       d_results[idx] = donardSlice(value, value_size);    
-      d_results[idx].copyKey(key_buf, key_size - 8);
-      //atomicAdd(results_size, value_size + key_size - 8);      
+      d_results[idx].copyKey(key_buf, key_size - 8);  
     }
 
     // Next DataKey...

@@ -361,7 +361,6 @@ void DecodeNFilterOnSchemaDonard(// Parameters
                            uint32_t num_task,
                            RudaSchema *schema,
                            // Results
-                           uint64_t *results_size,
-                           int *results_idx,
+                           unsigned long long int *results_idx,
                            donardSlice *d_results);
 }  // namespace ruda

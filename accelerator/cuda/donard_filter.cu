@@ -33,7 +33,13 @@ namespace ruda {
 namespace kernel {
 __global__
 void rudaDonardFilterKernel(char **file_address, uint64_t size, uint64_t *block_index, uint64_t *g_block_index, uint64_t block_unit, uint64_t *handles,
- RudaSchema *schema, uint64_t *results_size, int *results_idx, donardSlice *d_results);
+ RudaSchema *schema, unsigned long long int *d_results_idx, donardSlice *d_results);
+
+__global__
+void rudaCopyKernel(unsigned long long int count, donardSlice *d_results, char* d_total_results, unsigned long long int *total_results_idx);
+
+__global__
+void testKernel(unsigned long long int count, donardSlice *d_results, unsigned long long int *total_results_idx);
 }  // namespace kernel
 
 struct DonardManager {
@@ -43,7 +49,7 @@ struct DonardManager {
 
   // Parameter
 
-  int *num_entries_;
+  unsigned long long int *num_entries_;
 
   int num_file_;
   int total_blocks_;
@@ -51,10 +57,12 @@ struct DonardManager {
   int num_thread_;
   int max_results_count_;   
   std::vector<uint64_t> gpu_blocks_;
+
+  unsigned long long int results_size;
+  unsigned long long int count;
  
   
   // MetaData
-  //void **file_address;  // [fmlist[0]->data][fmlist[1]->data][fmlist[2]->data] ...
   char **file_address;
   uint64_t *block_index; // the number of blocks in each file
   uint64_t *g_block_index;
@@ -65,11 +73,13 @@ struct DonardManager {
   RudaSchema h_schema; // host schema
 
   // Result
-  int *d_results_idx;
-  uint64_t *d_results_size;
-  uint64_t *h_results_size;
+  unsigned long long int *d_results_idx;
   donardSlice *d_results;
   donardSlice * h_results;
+
+  unsigned long long int *total_results_idx;
+  char * d_total_results;
+  char * h_total_results;
 
   DonardManager(int num_file, int total_blocks, int block_unit, int num_thread, int max_results_count) {
     std::cout << "[DONARD MANAGER INITALIZE]" << std::endl;
@@ -78,6 +88,8 @@ struct DonardManager {
     block_unit_ = block_unit;
     num_thread_ = num_thread;
     max_results_count_ = max_results_count;
+    results_size = 0;
+    count = 0;
   }
 
   void populate(std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema) {
@@ -133,48 +145,66 @@ struct DonardManager {
     cudaCheckError(cudaMemcpy(d_schema, &h_schema, sizeof(RudaSchema), cudaMemcpyHostToDevice));
 
     std::cout << "[DONARD POPULATE4]" << std::endl;
-    cudaCheckError(cudaMalloc((void **) &d_results_idx, sizeof(int)));
-    cudaCheckError(cudaMemset(d_results_idx, 0, sizeof(int)));
-    cudaCheckError(cudaMalloc((void **) &d_results_size, sizeof(uint64_t)));
-    cudaCheckError(cudaMemset(d_results_size, 0, sizeof(int64_t)));
+    cudaCheckError(cudaMalloc((void **) &d_results_idx, sizeof(unsigned long long int)));
+    cudaCheckError(cudaMemset(d_results_idx, 0, sizeof(unsigned long long int)));
 
     std::cout << "[DONARD POPULATE5]" << std::endl;
     cudaCheckError(cudaMalloc((void **) &d_results, sizeof(donardSlice) * max_results_count_));
+
+    cudaCheckError(cudaMalloc((void **) &total_results_idx, sizeof(unsigned long long int)));
+    cudaCheckError(cudaMemset(total_results_idx, 0, sizeof(unsigned long long int)));
   
   }
 
   void executeKernel() {
     std::cout << "[DONARD KERNEL EXECUTE] : " << gpu_blocks_.back() << std::endl;
-    kernel::rudaDonardFilterKernel<<< gpu_blocks_.back() , num_thread_ >>> (file_address, num_file_, block_index, g_block_index, block_unit_, d_handles,
-                             d_schema, d_results_size, d_results_idx, d_results);
-    //cudaMemcpy(h_results_size, d_results_size, sizeof(uint64_t));
-  }
-
-  void translatePairsToSlices(std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results) {
-    std::cout << "[DONARD TRANSLATE TO SLICES]" << std::endl;
-    num_entries_ = (int *)malloc(sizeof(int));
-    cudaCheckError(cudaMemcpy(num_entries_, d_results_idx, sizeof(int), cudaMemcpyDeviceToHost));
+    kernel::rudaDonardFilterKernel<<< gpu_blocks_.back(), num_thread_ >>> (file_address, num_file_, block_index, g_block_index, block_unit_, d_handles,
+                             d_schema, d_results_idx, d_results);
+ 
+    cudaDeviceSynchronize();
+    num_entries_ = (unsigned long long int *)malloc(sizeof(unsigned long long int));
+    cudaCheckError(cudaMemcpy(num_entries_, d_results_idx, sizeof(unsigned long long int), cudaMemcpyDeviceToHost));
     
-    std::cout << "[DONARD TRANSLATE TO SLICES 1]" << std::endl;
-    int count = *num_entries_;
-
+    count = *num_entries_;
     h_results = (donardSlice *)malloc(sizeof(donardSlice) * count);
     cudaCheckError(cudaMemcpy(h_results, d_results, sizeof(donardSlice) * count, cudaMemcpyDeviceToHost));
 
+    for(uint i = 0; i <count ; i++) {
+      results_size += h_results[i].key_size + h_results[i].d_size + 4;
+    }
+ 
+    cudaCheckError(cudaMalloc((void **) &d_total_results, sizeof(char) * results_size));
+
+    uint32_t blockGrid = count / num_thread_ ;
+    uint32_t remain = count % num_thread_ ;   
+    if (remain != 0) blockGrid += 1;
+
+    std::cout << " results_size : " << results_size << " blockGrid : " << blockGrid << " count : " << count << std::endl;
+    kernel::rudaCopyKernel<<< blockGrid , num_thread_ >>> (count, d_results, d_total_results, total_results_idx);
+    cudaDeviceSynchronize();
+  }
+
+  void translatePairsToSlices(std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results) {
+
+    std::cout << "[DONARD TRANSLATE TO SLICES 0]" << std::endl;
+    h_total_results = (char *)malloc(sizeof(char) * results_size);
+    cudaCheckError(cudaMemcpy(h_total_results, d_total_results, sizeof(char) * results_size, cudaMemcpyDeviceToHost));
+
+    std::cout << "[DONARD TRANSLATE TO SLICES 1]" << std::endl;  
     std::cout << "[DONARD TRANSLATE TO SLICES 2] " << count << std::endl;
+
+    char *initialPtr = h_total_results;
     for (size_t i = 0; i < count; i++) {
-      size_t key_size = h_results[i].key_size;
-      char *key_char = (char *) malloc(sizeof(char) * key_size);
-      memcpy((void *)key_char, h_results[i].key, sizeof(char) * key_size);
+      size_t key_size = *((unsigned short *)initialPtr);
+      initialPtr += 2;
+      size_t value_size = *((unsigned short *)initialPtr);
+      initialPtr += 2;
 
-      size_t value_size = h_results[i].d_size;
-      char *val_char = (char *) malloc(sizeof(char) * value_size);
-      cudaCheckError(cudaMemcpy((void *)val_char, h_results[i].d_data, sizeof(char) * value_size, cudaMemcpyDeviceToHost));
+      keys.emplace_back(std::move(rocksdb::PinnableSlice(initialPtr, key_size)));
+      initialPtr += key_size;
 
-      keys.emplace_back(std::move(rocksdb::PinnableSlice(key_char, key_size)));
-      results.emplace_back(std::move(rocksdb::PinnableSlice(val_char, value_size)));
-      free(key_char);
-      free(val_char);
+      results.emplace_back(std::move(rocksdb::PinnableSlice(initialPtr, value_size)));
+      initialPtr += value_size;
     }
   }
 
@@ -185,17 +215,25 @@ struct DonardManager {
     } 
     cudaCheckError(cudaFreeHost(file_address)); 
     cudaCheckError(cudaFree(block_index));
+    cudaCheckError(cudaFree(g_block_index));
+    cudaCheckError(cudaFree(d_handles));
+
     cudaCheckError(h_schema.clear());
     cudaCheckError(cudaFree(d_schema));
 
     cudaCheckError(cudaFree(d_results_idx));
     cudaCheckError(cudaFree(d_results));
+    cudaCheckError(cudaFree(total_results_idx));
+    cudaCheckError(cudaFree(d_total_results));
+
+    free(h_results);
+    free(h_total_results);
   }
 };
 
 __global__
 void kernel::rudaDonardFilterKernel(char **file_address, uint64_t size, uint64_t *block_index, uint64_t *g_block_index, uint64_t g_block_unit, uint64_t * d_handles,
- RudaSchema *schema, uint64_t *results_size, int *results_idx, donardSlice *d_results) {  
+ RudaSchema *schema, unsigned long long int *results_idx, donardSlice *d_results) {  
   
   // blockDim.x * blockIdx.x + threadIdx.x;
   // blockDim = number of Thread in block
@@ -261,8 +299,56 @@ void kernel::rudaDonardFilterKernel(char **file_address, uint64_t size, uint64_t
   startLocation += (threadIdInBlock >= remainNumTask) ? (remainNumTask + (numTask * threadIdInBlock)) * sizeof(uint32_t) : (numTask * threadIdInBlock * sizeof(uint32_t));
 
   if (!lastThread) restartOffset = 0;
-  DecodeNFilterOnSchemaDonard(startPtr, restartOffset, startLocation, numTask, schema, results_size, results_idx, d_results); 
+  DecodeNFilterOnSchemaDonard(startPtr, restartOffset, startLocation, numTask, schema, results_idx, d_results); 
 
+}
+
+__global__
+void kernel::rudaCopyKernel(unsigned long long int count, donardSlice *d_results, char* total_results, unsigned long long int *total_results_idx) {
+
+  unsigned long long int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if(idx >= count) {
+    return;
+  }
+  //printf("blockidx : %d, threadidx : %d\n", blockIdx.x, threadIdx.x);
+  size_t key_size = d_results[idx].key_size;
+  size_t value_size = d_results[idx].d_size;
+  unsigned long long int kvPairSize = key_size + value_size;
+
+  unsigned long long int resultOffset = atomicAdd(total_results_idx, kvPairSize + 4);
+
+  char* targetIdx = total_results + resultOffset;
+
+  char *k_size = (char *)&key_size;
+  for (uint i = 0; i < sizeof(unsigned short); i++) {
+    targetIdx[i] = k_size[i];
+  }
+
+  targetIdx += 2;
+
+  char *v_size = (char *)&value_size;
+  for (uint i = 0; i < sizeof(unsigned short); i++) {
+    targetIdx[i] = v_size[i];
+  }
+
+  targetIdx += 2;
+
+  for(uint i = 0; i < key_size; i++) {
+    targetIdx[i] = d_results[idx].key[i];
+  }
+
+  targetIdx += key_size;
+
+  for(uint i = 0; i < value_size; i++) {
+    targetIdx[i] = d_results[idx].d_data[i];
+  }  
+}
+
+__global__
+void kernel::testKernel(unsigned long long int count, donardSlice *d_results, unsigned long long int *total_results_idx) {
+  unsigned long long int idx = blockDim.x * blockIdx.x + threadIdx.x;
+  printf("idx : %d\n", idx);
 }
 
 int donardFilter( std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,

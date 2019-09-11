@@ -1386,7 +1386,8 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
 void Version::ValueFilter(const ReadOptions& read_options,
                           const LookupKey& k, const SlicewithSchema& schema_k,
                           std::vector<PinnableSlice> &keys,
-                          std::vector<PinnableSlice> &value, Status* status,
+                          std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries,
+                          Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
                           bool* value_found, bool* key_exists,
@@ -1406,7 +1407,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
   GetContext get_context(
       user_comparator(), merge_operator_, info_log_, db_statistics_,
       status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
-      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
+      value, data_buf, num_entries, value_found, merge_context, max_covering_tombstone_seq, this->env_,
       seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
   // Pin blocks that we read to hold merge operands
@@ -1468,7 +1469,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
 void Version::donardFilter(const ReadOptions& read_options,
                           const LookupKey& k, const SlicewithSchema& schema_k,
                           std::vector<PinnableSlice> &keys,
-                          std::vector<PinnableSlice> &value, Status* status,
+                          std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
                           bool* value_found, bool* key_exists,
@@ -1488,7 +1489,7 @@ void Version::donardFilter(const ReadOptions& read_options,
   GetContext get_context(
       user_comparator(), merge_operator_, info_log_, db_statistics_,
       status->ok() ? GetContext::kNotFound : GetContext::kMerge, user_key, keys,
-      value, value_found, merge_context, max_covering_tombstone_seq, this->env_,
+      value, data_buf, num_entries, value_found, merge_context, max_covering_tombstone_seq, this->env_,
       seq, merge_operator_ ? &pinned_iters_mgr : nullptr, callback, is_blob);
 
   // Pin blocks that we read to hold merge operands
@@ -1708,13 +1709,13 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
 }
 
 void Version::AsyncFilterBlock(const ReadOptions& /*read_options*/,
-                          rocksdb::GPUManager *gpu_manager_, Status* status,
-                          MergeContext* merge_context,
-                          SequenceNumber* max_covering_tombstone_seq, SequenceNumber snapshot,
-                          bool* value_found, bool* /*key_exists*/,
-                          SequenceNumber* seq, ReadCallback* callback,
-                          bool* is_blob) {
-
+                          rocksdb::GPUManager *gpu_manager_, Status* /*status*/,
+                          MergeContext* /*merge_context*/,
+                          SequenceNumber* /*max_covering_tombstone_seq*/, SequenceNumber /*snapshot*/,
+                          bool* /*value_found*/, bool* /*key_exists*/,
+                          SequenceNumber* /*seq*/, ReadCallback* /*callback*/,
+                          bool* /*is_blob*/) {
+/*
   std::vector<SlicewithSchema> *schema_k = gpu_manager_->schemakey;
   for (uint i = 0; i < schema_k->size(); i++) {
     LookupKey k((*schema_k)[i], snapshot);
@@ -1745,7 +1746,7 @@ void Version::AsyncFilterBlock(const ReadOptions& /*read_options*/,
     gpu_manager_->fp_list[i] = fp;
     gpu_manager_->context_list[i] = get_context;
   }
-
+*/
   /* manager Queue start */
   gpu_manager_->q_start();
   gpu_manager_->p_start();

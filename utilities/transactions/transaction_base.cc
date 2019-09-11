@@ -218,10 +218,10 @@ Status TransactionBaseImpl::ValueFilter(const ReadOptions& read_options,
                                         ColumnFamilyHandle* column_family,
                                         const SlicewithSchema& key,
                                         std::vector<PinnableSlice> &keys,
-                                        std::vector<PinnableSlice> &pinnable_values, int join_idx) {
+                                        std::vector<PinnableSlice> &pinnable_values, char **data_buf, uint64_t *num_entries, int join_idx) {
   return write_batch_.ValueFilterFromBatchAndDB(db_, read_options,
                                                 column_family, key, keys,
-                                                pinnable_values, join_idx);
+                                                pinnable_values, data_buf, num_entries, join_idx);
 }
 
 Status TransactionBaseImpl::AsyncFilter(ColumnFamilyHandle* column_family,

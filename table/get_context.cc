@@ -57,6 +57,7 @@ GetContext::GetContext(const Comparator* ucmp,
       pinnable_val_(pinnable_val),
       keys_(nullptr),
       values(nullptr),
+      data_buf_(nullptr),  
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
@@ -73,6 +74,7 @@ GetContext::GetContext(const Comparator* ucmp,
   sample_ = should_sample_file_read();
 }
 
+/*
 GetContext::GetContext(const Comparator* ucmp,
                        const MergeOperator* merge_operator, Logger* logger,
                        Statistics* statistics, GetState init_state,
@@ -106,12 +108,13 @@ GetContext::GetContext(const Comparator* ucmp,
   }
   sample_ = should_sample_file_read();
 }
-
+*/
 GetContext::GetContext(const Comparator* ucmp,
                        const MergeOperator* merge_operator, Logger* logger,
                        Statistics* statistics, GetState init_state,
                        const Slice& user_key, std::vector<PinnableSlice> &keys,
-                       std::vector<PinnableSlice> &pinnable_val,
+                       std::vector<PinnableSlice> &pinnable_val, char **data_buf,
+                       uint64_t *num_entries,        
                        bool* value_found, MergeContext* merge_context,
                        SequenceNumber* _max_covering_tombstone_seq, Env* env,
                        SequenceNumber* seq,
@@ -126,6 +129,8 @@ GetContext::GetContext(const Comparator* ucmp,
       pinnable_val_(nullptr),
       keys_(&keys),
       values(&pinnable_val),
+      data_buf_(data_buf),
+      num_entries_(num_entries),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),
@@ -142,6 +147,7 @@ GetContext::GetContext(const Comparator* ucmp,
   sample_ = should_sample_file_read();
 }
 
+/*
 GetContext::GetContext(const Comparator* ucmp,
                        const MergeOperator* merge_operator, Logger* logger,
                        Statistics* statistics, GetState init_state,
@@ -176,6 +182,7 @@ GetContext::GetContext(const Comparator* ucmp,
   }
   sample_ = should_sample_file_read();
 }
+*/
 
 GetContext::GetContext(const Comparator* ucmp,
                        const MergeOperator* merge_operator, Logger* logger,
@@ -196,6 +203,8 @@ GetContext::GetContext(const Comparator* ucmp,
       pinnable_val_(nullptr),
       keys_(&keys),        
       values(&pinnable_val),
+      data_buf_(nullptr),
+      num_entries_(nullptr),
       value_found_(value_found),
       merge_context_(merge_context),
       max_covering_tombstone_seq_(_max_covering_tombstone_seq),

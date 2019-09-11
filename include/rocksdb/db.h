@@ -349,10 +349,12 @@ class DB {
                              const SlicewithSchema& /*key*/,
                              std::vector<PinnableSlice>& /*keys*/,
                              std::vector<PinnableSlice>& /*value*/,
+                             char ** /*data_buf*/,
+                             uint64_t * /*num_entries*/,
                              int /*join_idx*/) {
     return Status();
   }
-
+  
   virtual Status AsyncFilter(ColumnFamilyHandle* /*column_family*/,
                              rocksdb::GPUManager */*gpu_manager_*/) {
     return Status();

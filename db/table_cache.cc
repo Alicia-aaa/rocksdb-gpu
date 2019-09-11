@@ -794,7 +794,8 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
   std::cout << " handles size = " << handles.size() << std::endl;
   std::cout << " block num = " << num_blocks.back() << std::endl;
 
-  int err = ruda::donardFilter(file_input, num_blocks, handles, schema_k, total_entries, *get_context->keys_ptr(), *get_context->val_ptr());
+  int err = ruda::donardFilter(file_input, num_blocks, handles, schema_k, total_entries, *get_context->keys_ptr(), 
+          *get_context->val_ptr(), get_context->data_buf_ptr(), get_context->entry_ptr());
 
 
   file_input.clear();

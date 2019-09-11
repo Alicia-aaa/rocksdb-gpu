@@ -119,18 +119,20 @@ class DBImpl : public DB {
                              ColumnFamilyHandle* column_family,
                              const SlicewithSchema& key,
                              std::vector<PinnableSlice> &keys,
-                             std::vector<PinnableSlice> &values, int join_idx) override;
+                             std::vector<PinnableSlice> &values, char **data_buf, uint64_t *num_entries, int join_idx) override;
 
   Status ValueFilterImpl(const ReadOptions& options,
                          ColumnFamilyHandle* column_family,
                          const SlicewithSchema& key,
                          std::vector<PinnableSlice> &keys,
                          std::vector<PinnableSlice> &values,
+                         char **data_buf,
+                         uint64_t *num_entries,
                          int join_idx,
                          bool* value_found = nullptr,
                          ReadCallback* callback = nullptr,
                          bool* is_blob_index = nullptr);
-  
+   
   using DB::AsyncFilter;
   virtual Status AsyncFilter(ColumnFamilyHandle* column_family,
                              rocksdb::GPUManager *gpu_manager_) override;

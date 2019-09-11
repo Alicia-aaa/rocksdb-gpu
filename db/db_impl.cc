@@ -1216,8 +1216,8 @@ Status DBImpl::ValueFilter(const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family,
                            const SlicewithSchema& key,
                            std::vector<PinnableSlice> &keys,
-                           std::vector<PinnableSlice> &value, int join_idx) {
-  return ValueFilterImpl(read_options, column_family, key, keys, value, join_idx);
+                           std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, int join_idx) {
+  return ValueFilterImpl(read_options, column_family, key, keys, value, data_buf, num_entries, join_idx);
 }
 
 Status DBImpl::AsyncFilter(ColumnFamilyHandle* column_family,
@@ -1346,7 +1346,7 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                ColumnFamilyHandle* column_family,
                                const SlicewithSchema& key,
                                std::vector<PinnableSlice> &keys,
-                               std::vector<PinnableSlice> &pinnable_val, int join_idx,
+                               std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx,
                                bool* value_found,
                                ReadCallback* callback, bool* is_blob_index) {
   StopWatch sw(env_, stats_, DB_GET);
@@ -1442,13 +1442,13 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                   join_idx, value_found, nullptr, nullptr,
                                   callback, is_blob_index);
   } else if (read_options.value_filter_mode == accelerator::ValueFilterMode::DONARD) {
-    sv->current->donardFilter(read_options, lkey, key, keys, pinnable_val, &s,
+    sv->current->donardFilter(read_options, lkey, key, keys, pinnable_val, data_buf, num_entries, &s,
                               &merge_context, &max_covering_tombstone_seq,
                               value_found, nullptr, nullptr, callback,
                               is_blob_index);
   } else  {
     std::cout << "ValueFilter Called " << std::endl;
-    sv->current->ValueFilter(read_options, lkey, key, keys, pinnable_val, &s,
+    sv->current->ValueFilter(read_options, lkey, key, keys, pinnable_val, data_buf, num_entries, &s,
                               &merge_context, &max_covering_tombstone_seq,
                               value_found, nullptr, nullptr, callback,
                               is_blob_index);

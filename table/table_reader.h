@@ -64,7 +64,7 @@ class TableReader {
     return 0;
   };
   
-  virtual Status GetBlockHandles(const ReadOptions&, std::vector<uint64_t> &handles) {
+  virtual Status GetBlockHandles(const ReadOptions&, std::vector<uint64_t> & /*handles*/) {
     return Status();
   };
   

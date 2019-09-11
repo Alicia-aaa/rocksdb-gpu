@@ -70,7 +70,7 @@ int recordAsyncFilter(/* const */ std::vector<char> &datablocks,
                       std::vector<rocksdb::PinnableSlice> &results, ruda::RudaAsyncManager * async_manager);
 
 int donardFilter(std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,
-        uint64_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results);
+        uint64_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results, char **data_buf, uint64_t *num_entries);
 
 int releaseAsyncManager(ruda::RudaAsyncManager * async_manager);
 

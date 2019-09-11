@@ -58,7 +58,7 @@ class GetContext {
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
 
   /*GPU Accelerator*/
-
+/*
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
              const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
@@ -67,16 +67,17 @@ class GetContext {
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
-  
+*/  
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
-             const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value, bool* value_found,
+             const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value, char **data_buf,
+             uint64_t *num_entries, bool* value_found,
              MergeContext* merge_context,
              SequenceNumber* max_covering_tombstone_seq, Env* env,
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
-
+/*
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
              const Slice& user_key, std::vector<PinnableSlice> &value, bool* value_found,
@@ -85,7 +86,7 @@ class GetContext {
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
              ReadCallback* callback = nullptr, bool* is_blob_index = nullptr);
-  
+  */
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
              const Slice& user_key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value, bool* value_found,
@@ -151,6 +152,14 @@ class GetContext {
 	  return values;
   }
   
+  char **data_buf_ptr() {
+	  return data_buf_;
+  }
+  
+  uint64_t *entry_ptr() {
+	  return num_entries_;
+  }
+  
   Slice *key_ptr() {
       return key_to_find;
   }
@@ -167,6 +176,8 @@ class GetContext {
   PinnableSlice* pinnable_val_;
   std::vector<PinnableSlice> *keys_;
   std::vector<PinnableSlice> *values;
+  char **data_buf_;
+  uint64_t *num_entries_;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
   MergeContext* merge_context_;
   SequenceNumber* max_covering_tombstone_seq_;

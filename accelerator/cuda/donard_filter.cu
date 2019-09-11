@@ -79,7 +79,7 @@ struct DonardManager {
 
   unsigned long long int *total_results_idx;
   char * d_total_results;
-  char * h_total_results;
+ //char * h_total_results;
 
   DonardManager(int num_file, int total_blocks, int block_unit, int num_thread, int max_results_count) {
     std::cout << "[DONARD MANAGER INITALIZE]" << std::endl;
@@ -184,12 +184,18 @@ struct DonardManager {
     cudaDeviceSynchronize();
   }
 
-  void translatePairsToSlices(std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results) {
+  void translatePairsToSlices(std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results, char **data_buf, uint64_t *num_entries) {
 
     std::cout << "[DONARD TRANSLATE TO SLICES 0]" << std::endl;
-    h_total_results = (char *)malloc(sizeof(char) * results_size);
-    cudaCheckError(cudaMemcpy(h_total_results, d_total_results, sizeof(char) * results_size, cudaMemcpyDeviceToHost));
+    //h_total_results = (char *)malloc(sizeof(char) * results_size);
+    //cudaCheckError(cudaMemcpy(h_total_results, d_total_results, sizeof(char) * results_size, cudaMemcpyDeviceToHost));
 
+    *num_entries = count;
+    *data_buf = (char *)malloc(sizeof(char) * results_size);
+    char *target_ptr = *data_buf;
+    cudaCheckError(cudaMemcpy(target_ptr, d_total_results, sizeof(char) * results_size, cudaMemcpyDeviceToHost));
+  
+    /*
     std::cout << "[DONARD TRANSLATE TO SLICES 1]" << std::endl;  
     std::cout << "[DONARD TRANSLATE TO SLICES 2] " << count << std::endl;
 
@@ -206,6 +212,7 @@ struct DonardManager {
       results.emplace_back(std::move(rocksdb::PinnableSlice(initialPtr, value_size)));
       initialPtr += value_size;
     }
+   */
   }
 
   void clear() {
@@ -227,7 +234,7 @@ struct DonardManager {
     cudaCheckError(cudaFree(d_total_results));
 
     free(h_results);
-    free(h_total_results);
+   // free(h_total_results);
   }
 };
 
@@ -354,7 +361,7 @@ void kernel::testKernel(unsigned long long int count, donardSlice *d_results, un
 int donardFilter( std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,
                   uint64_t max_results_count,
                   std::vector<rocksdb::PinnableSlice> &keys,
-                  std::vector<rocksdb::PinnableSlice> &results) {
+                  std::vector<rocksdb::PinnableSlice> &results, char **data_buf, uint64_t *num_entries) {
 
   std::cout << "[GPU][donardFilter] START" << std::endl;
 
@@ -372,7 +379,7 @@ int donardFilter( std::vector<std::string> files, std::vector<uint64_t> num_bloc
   donard_mgr.populate(files, num_blocks, handles, schema);
   donard_mgr.executeKernel();
 
-  donard_mgr.translatePairsToSlices(keys, results);
+  donard_mgr.translatePairsToSlices(keys, results, data_buf, num_entries);
   donard_mgr.clear();
 
   std::cout << "This is end " << std::endl;

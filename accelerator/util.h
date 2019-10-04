@@ -72,10 +72,11 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
     // So, when decode a nullable column, below code must handles null notifier
     // byte.
     if (schema_key.getType(i) == 15) {
+      record_ptr += schema_key.getSkip(i);
       uint data_len = schema_key.getLength(i) == 1
           ? (unsigned char) record_ptr[0]
           : (unsigned short)(*((unsigned short *)(record_ptr)));
-      record_ptr += data_len + schema_key.getLength(i) + schema_key.getSkip(i);
+      record_ptr += data_len + schema_key.getLength(i);
     } else {
       record_ptr += (schema_key.getLength(i) + schema_key.getSkip(i));
     }
@@ -92,7 +93,7 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
     // long test = (result % 32L) + (result / 32L % 16L) * 100L + (result/(16L*32L)) * 10000L;
     // printf("[util.h][convertRecord] test: %ld\n", test);
   } else if (schema_key.getType(target_idx) == 3 ) { // Long Type
-    result = sint4korr(record_ptr);
+    result = sint4korr((unsigned char*)record_ptr);
   } else if (schema_key.getType(target_idx) == 4 ) {
     result = sint4korr(record_ptr);
   } else  if (schema_key.getType(target_idx) == 254 ) {

@@ -91,10 +91,11 @@ long rudaConvertRecord(RudaSchema *schema, const char *record_ptr, char * pivot)
     // So, when decode a nullable column, below code must handles null notifier
     // byte.
     if (schema->field_type[i] == 15) {
+      record_ptr += schema->field_skip[i];
       uint data_len = schema->field_length[i] == 1
           ? (unsigned char) record_ptr[0]
           : uint2korr(record_ptr);
-      record_ptr += data_len + schema->field_length[i] + schema->field_skip[i];
+      record_ptr += data_len + schema->field_length[i];
     } else {
       record_ptr += (schema->field_length[i] + schema->field_skip[i]);
     }

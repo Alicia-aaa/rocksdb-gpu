@@ -126,13 +126,15 @@ struct DonardManager {
 
     std::cout << "gpu block index size " << gpu_blocks_.size() << std::endl;
 
-    std::cout << "[DONARD POPULATE2]" << std::endl;
+    std::cout << "[DONARD POPULATE2] block_index " << sizeof(uint64_t) * num_blocks.size() << std::endl;
     cudaCheckError(cudaMalloc((void **) &block_index, sizeof(uint64_t) * num_blocks.size()));
     cudaCheckError(cudaMemcpy(block_index, &num_blocks[0], sizeof(uint64_t) * num_blocks.size(), cudaMemcpyHostToDevice));
 
+    std::cout << "[DONARD POPULATE2] g_block_index " << sizeof(uint64_t) * gpu_blocks_.size() << std::endl;
     cudaCheckError(cudaMalloc((void **) &g_block_index, sizeof(uint64_t) * gpu_blocks_.size()));
     cudaCheckError(cudaMemcpy(g_block_index, &gpu_blocks_[0], sizeof(uint64_t) * gpu_blocks_.size(), cudaMemcpyHostToDevice));
 
+    std::cout << "[DONARD POPULATE2] d_handles " << sizeof(uint64_t) * handles.size() << std::endl;
     cudaCheckError(cudaMalloc((void **) &d_handles, sizeof(uint64_t) * handles.size()));
     cudaCheckError(cudaMemcpy(d_handles, &handles[0], sizeof(uint64_t) * handles.size(), cudaMemcpyHostToDevice));
   
@@ -148,7 +150,7 @@ struct DonardManager {
     cudaCheckError(cudaMalloc((void **) &d_results_idx, sizeof(unsigned long long int)));
     cudaCheckError(cudaMemset(d_results_idx, 0, sizeof(unsigned long long int)));
 
-    std::cout << "[DONARD POPULATE5]" << std::endl;
+    std::cout << "[DONARD POPULATE5] d_results " << sizeof(donardSlice) * max_results_count_ << std::endl;
     cudaCheckError(cudaMalloc((void **) &d_results, sizeof(donardSlice) * max_results_count_));
 
     cudaCheckError(cudaMalloc((void **) &total_results_idx, sizeof(unsigned long long int)));
@@ -172,14 +174,15 @@ struct DonardManager {
     for(uint i = 0; i <count ; i++) {
       results_size += h_results[i].key_size + h_results[i].d_size + 4;
     }
- 
+
+    std::cout << " results_size : " << results_size << std::endl;
     cudaCheckError(cudaMalloc((void **) &d_total_results, sizeof(char) * results_size));
 
     uint32_t blockGrid = count / num_thread_ ;
     uint32_t remain = count % num_thread_ ;   
     if (remain != 0) blockGrid += 1;
 
-    std::cout << " results_size : " << results_size << " blockGrid : " << blockGrid << " count : " << count << std::endl;
+    std::cout << " blockGrid : " << blockGrid << " count : " << count << std::endl;
     kernel::rudaCopyKernel<<< blockGrid , num_thread_ >>> (count, d_results, d_total_results, total_results_idx);
     cudaDeviceSynchronize();
   }

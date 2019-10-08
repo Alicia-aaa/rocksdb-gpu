@@ -482,16 +482,12 @@ void DecodeNFilterOnSchemaDonard(// Parameters
                            ruda::donardSlice *d_results){
 
 
-  int start = DecodeFixed32(start_ptr + start_offset);
-  int end;
   const char *subblock = start_ptr + DecodeFixed32(start_ptr + start_offset);
   const char *limit;
   if( restart_offset != 0) { 
     limit = start_ptr + restart_offset;
-    end = restart_offset;
   } else { 
     limit = start_ptr + DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
-    end = DecodeFixed32(start_ptr + start_offset + num_task * sizeof(uint32_t));
   }
  
   size_t key_buf_size = DEFAULT_KEY_BUF_SIZE;

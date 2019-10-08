@@ -2419,10 +2419,7 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
                                       std::vector<uint64_t>& seek_indices,
                                       uint64_t seek_index_start_offset) {
   Status s;
-  
-//  std::unique_ptr<FilePrefetchBuffer> prefetch_buffer;
-//  prefetch_buffer.reset(new FilePrefetchBuffer(rep_->file.get(), 8*1024, 256*1024));
-  
+ 
   IndexBlockIter iiter_on_stack;
   auto iiter =
       NewIndexIterator(read_options,
@@ -2432,10 +2429,6 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
   if (iiter != &iiter_on_stack) {
     iiter_unique_ptr.reset(iiter);
   }
-
-//  size_t readahead_size_ = 8 * 1024;
-//  size_t readahead_limit_ = 0;
-//  size_t kMaxReadaheadSize = 256 * 1024;
   
   uint64_t accumulated_data_index = seek_index_start_offset;
   for (iiter->SeekToFirst(); iiter->Valid(); iiter->Next()) {
@@ -2445,16 +2438,6 @@ Status BlockBasedTable::GetDataBlocks(const ReadOptions& read_options,
       compression_dict = rep_->compression_dict_block->data;
     }
 
-//    if(handle.offset() + static_cast<size_t>(handle.size()) + 5 > readahead_limit_)
-//    {
-//        begin = clock();
-//         rep_->file->Prefetch(handle.offset(), readahead_size_);
-//        readahead_limit_ = static_cast<size_t>(handle.offset() + readahead_size_);
-//        readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ * 2);
-//        end = clock();
-//        prefetchTime += (end - begin);
-//    }
-    
     std::unique_ptr<Block> block;
     if (s.ok()) {
       s = ReadBlockFromFile(

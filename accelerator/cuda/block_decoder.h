@@ -238,7 +238,7 @@ class donardSlice {
     memcpy(key, key_src, sizeof(char) * key_size);  
   }
   
-  char key[32];
+  char key[16];
   size_t key_size;
   const char* d_data;
   size_t d_size;

@@ -529,18 +529,7 @@ struct RudaRecordBlockManager {
     unsigned long long int count = *ctx.h_results_count;
     for (size_t i = 0; i < count; ++i) {
       RudaKVIndexPair &result = ctx.h_results[i];
-      
-//      char key_buf[128];
-//      size_t size = 0;
-//      size_t ptr = 0;
-//      
-//      for(size_t j = 0; j < result.idx; ++j) {
-//          size_t partkey_size = result.key_indices[j].end_ - result.key_indices[j].start_;
-//          memcpy(key_buf + ptr + result.key_indices[j].shared_, &datablocks[0] + result.key_indices[j].start_, partkey_size);
-//          ptr += result.key_indices[j].shared_;
-//          size += result.key_indices[j].shared_ + partkey_size;
-//      }
-      
+           
       sub_keys.emplace_back(result.key, result.key_size);
       
       size_t value_size =
@@ -557,9 +546,10 @@ struct RudaRecordBlockManager {
       std::cout << "[ERROR][RudaRecordBlockManager][translatePairsToSlices] Pre-error before calling" << std::endl;
       cudaCheckError(err);
     }
-    std::chrono::high_resolution_clock::time_point begin, end;
+    std::chrono::high_resolution_clock::time_point pbegin, pend;
+    std::chrono::high_resolution_clock::time_point sbegin, send;
 
-    begin = std::chrono::high_resolution_clock::now();
+    sbegin = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> workers;
     std::vector< std::vector<rocksdb::Slice> > sub_keys_arr(kStreamCount);
     std::vector< std::vector<rocksdb::Slice> > sub_values_arr(kStreamCount);
@@ -584,13 +574,14 @@ struct RudaRecordBlockManager {
       workers[i].join();
     }
 
+    send = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float, std::milli> selapsed = send - sbegin;
+
+    pbegin = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < kStreamCount; ++i) {
       std::vector<rocksdb::Slice> &sub_keys = sub_keys_arr[i];  
       std::vector<rocksdb::Slice> &sub_values = sub_values_arr[i];
-//      for(size_t j = 0; j< sub_keys.size(); ++j) {
-//        keys.emplace_back(std::move(sub_keys[j]));
-//        values.emplace_back(std::move(rocksdb::PinnableSlice(sub_values[j].data_, sub_values[j].size_)));
-//      }
+
       for(auto &sub_key : sub_keys) {
           keys.emplace_back(std::move(rocksdb::PinnableSlice(sub_key.data_, sub_key.size_)));
       }
@@ -600,10 +591,10 @@ struct RudaRecordBlockManager {
       }
     }
 
-    end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float, std::milli> elapsed = end - begin;
-    std::cout << "[GPU][translatePairsToSlices] Execution Time: "
-        << elapsed.count() << std::endl;
+    pend = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float, std::milli> pelapsed = pend - pbegin;
+    std::cout << "[GPU][translatePairsToSlices] Slice Execution Time : "
+        << selapsed.count() << " PSlice Execution Time : " << pelapsed.count() << std::endl;
   }
 
   void log() {

@@ -683,8 +683,10 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   datablocks_batch.emplace_back(std::vector<char>());
   seek_indices_batch.emplace_back(std::vector<uint64_t>());
   total_entries_batch.push_back(0);
-    
+  std::chrono::high_resolution_clock::time_point rbegin, rend;
+   
   while(readers.size()) {
+      rbegin = std::chrono::high_resolution_clock::now();
       auto& datablocks = datablocks_batch.back();
       auto& seek_indices = seek_indices_batch.back();
       auto& total_entries = total_entries_batch.back();
@@ -700,7 +702,11 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
           datablocks.size() + (sizeof(uint64_t) * seek_indices.size());  
       readers.pop_back();  
       reader_skip_filters.pop_back();
+      rend = std::chrono::high_resolution_clock::now();
 
+      std::chrono::duration<float, std::milli> relapsed = rend - rbegin;
+      //std::cout << "[GPU][ValueFilterGPU] Execution Time for GetDataBlocks "<< relapsed.count() << std::endl;
+      
       if (load_size > gpu_loadable_size) {
           break;
       }
@@ -745,7 +751,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
 
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
-  uint64_t gpu_loadable_size = 13ULL << 30; // 13GB 
+  uint64_t gpu_loadable_size = 8ULL << 30; // 13GB 
  
   std::cout << " fileList size  : " << fileList.size() << std::endl;
   

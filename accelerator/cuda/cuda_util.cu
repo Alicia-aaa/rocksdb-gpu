@@ -113,9 +113,13 @@ long rudaConvertRecord(RudaSchema *schema, const char *record_ptr, char * pivot)
   } else if (target_type == 254) {
     const char *end = (const char *)skip_trailing_space((const unsigned char*) record_ptr, schema->field_length[schema->target_idx]);
     size_t len = (size_t) (end - record_ptr);
-//    printf("record ptr  = %p\n", record_ptr);
-//    unsigned char *temp = (unsigned char *)malloc(sizeof(unsigned char) * len);
-    memcpy(pivot, record_ptr + 1, len);
+
+    if(record_ptr[0] == 0x00) {
+      record_ptr += 1;
+      len -= 1;
+    }
+
+    memcpy(pivot, record_ptr, len);
 //    for (unsigned int i = 0; i < 25; ++i) {
 //      printf("%c", temp[i]);
 //    }

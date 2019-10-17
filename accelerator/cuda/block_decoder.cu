@@ -435,9 +435,9 @@ void DecodeNFilterOnSchema(// Parameters
         break;
       case accelerator::STRMATCH:
         for(int i = 0; i < schema->ctx.str_num; ++i) {
-//            printf("cpivot = %s and pivot = %s and length = %d\n", schema->ctx.cpivot[i], pivot, decoded_value);
-//          printf("cpivot = %d\n", schema->ctx.cpivot[i][decoded_value]);
-//          printf("pivot = %d\n", pivot[decoded_value]);
+//        printf("cpivot = %s and pivot = %s and length = %d\n", schema->ctx.cpivot[i], pivot, decoded_value);
+//        printf("cpivot = %d\n", schema->ctx.cpivot[i][decoded_value]);
+//        printf("pivot = %d\n", pivot[decoded_value]);
           if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
             filter_result = true;
             break;

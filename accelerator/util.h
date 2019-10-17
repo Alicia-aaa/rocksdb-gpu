@@ -99,8 +99,14 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
   } else  if (schema_key.getType(target_idx) == 254 ) {
     const char *end = (const char *)skip_trailing_space((const unsigned char*) record_ptr, schema_key.field_length[schema_key.target_idx]);
     size_t len = (size_t) (end - record_ptr);
+
+    if(record_ptr[0] == 0x00) {
+      record_ptr += 1;
+      len -= 1;
+    }
+
     std::string str;
-    str.assign(record_ptr + 1, len - 1);
+    str.assign(record_ptr, len);
 
     result = compute_hash(str);
     //std::cout << "str = " << str << " and " << result << " and  " << len << std::endl;    

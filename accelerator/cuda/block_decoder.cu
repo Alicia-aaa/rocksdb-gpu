@@ -314,7 +314,7 @@ void CachedDecodeNFilterOnSchema(// Parameters
       case accelerator::NOT_EQ:
         filter_result = decoded_value != schema->ctx._pivot;
         break;
-      case accelerator::MATCH:  
+      case accelerator::STRMATCH:  
         for(int i = 0; i < schema->ctx.str_num; ++i) {
           if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
             filter_result = true;
@@ -433,7 +433,7 @@ void DecodeNFilterOnSchema(// Parameters
       case accelerator::NOT_EQ:
         filter_result = decoded_value != schema->ctx._pivot;
         break;
-      case accelerator::MATCH:
+      case accelerator::STRMATCH:
         for(int i = 0; i < schema->ctx.str_num; ++i) {
 //            printf("cpivot = %s and pivot = %s and length = %d\n", schema->ctx.cpivot[i], pivot, decoded_value);
 //          printf("cpivot = %d\n", schema->ctx.cpivot[i][decoded_value]);
@@ -563,7 +563,7 @@ void DecodeNFilterOnSchemaDonard(// Parameters
       case accelerator::NOT_EQ:
         filter_result = decoded_value != schema->ctx._pivot;
         break;
-      case accelerator::MATCH:
+      case accelerator::STRMATCH:
         for(int i = 0; i < schema->ctx.str_num; ++i) {
           if (memcmp(schema->ctx.cpivot[i], pivot, decoded_value)) {
             filter_result = true;

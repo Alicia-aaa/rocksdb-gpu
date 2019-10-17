@@ -21,7 +21,7 @@ enum class ValueFilterMode {
 };
 
 enum Operator {
-  EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ, NOT_EQ, MATCH, INVALID
+  EQ = 0, LESS, GREATER, LESS_EQ, GREATER_EQ, NOT_EQ, STRMATCH, INVALID
 };
 
 inline std::string toStringOperator(Operator op) {
@@ -32,7 +32,7 @@ inline std::string toStringOperator(Operator op) {
     case LESS_EQ: return "LESS_EQ";
     case GREATER_EQ: return "GREATER_EQ";
     case NOT_EQ: return "NOT_EQ";
-    case MATCH: return "MATCH";
+    case STRMATCH: return "STRMATCH";
     default: return "INVALID";
   }
 }
@@ -53,7 +53,7 @@ struct FilterContext {
 
   bool isValidOp() const {
     return _op == EQ || _op == LESS || _op == GREATER || _op == LESS_EQ
-        || _op == GREATER_EQ || _op == NOT_EQ || _op == MATCH;
+        || _op == GREATER_EQ || _op == NOT_EQ || _op == STRMATCH;
   }
 
   int operator()(const long target) const {
@@ -70,7 +70,13 @@ struct FilterContext {
         return target >= _pivot ? 1 : 0;
       case NOT_EQ:
         return target != _pivot ? 1 : 0;
-      case MATCH:
+      case STRMATCH:
+      {
+        for(int i = 0 ; i < str_num; i++) {
+          if(target == pivots[i]) return 1;
+        }
+        return 0;
+      }
       default:
         return 0;
     }

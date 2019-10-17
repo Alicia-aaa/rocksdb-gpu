@@ -496,6 +496,7 @@ Status _ValueFilterAVX(const ReadOptions& options,
                        const SliceTransform *prefix_extractor) {
   Status s;
   size_t i = 0;
+  std::cout << "valueFilt AVX reader : " << readers.size() << std::endl;
   for (i = 0; i < readers.size(); ++i) {
     TableReader *reader = readers[i];
     bool skip_filters = reader_skip_filters[i];
@@ -672,7 +673,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   // Splits readers by GPU-loadable size.
   uint64_t gpu_loadable_size = 13ULL << 30; // 3GB 
  
-  std::cout << " reader size  : " << readers.size() << std::endl;
+  std::cout << " reader size11  : " << readers.size() << std::endl;
   
   if(!readers.size()) return Status::NotFound();
   
@@ -684,6 +685,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   seek_indices_batch.emplace_back(std::vector<uint64_t>());
   total_entries_batch.push_back(0);
   std::chrono::high_resolution_clock::time_point rbegin, rend;
+  std::vector<TableReader *> temp_readers;
    
   while(readers.size()) {
       rbegin = std::chrono::high_resolution_clock::now();
@@ -692,6 +694,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
       auto& total_entries = total_entries_batch.back();
       
       auto reader = readers.back();
+      temp_readers.emplace_back(reader);
 
       uint64_t seek_indices_start_offset = datablocks.size();
       reader->GetDataBlocks(
@@ -711,23 +714,25 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
           break;
       }
   }          
-  
+  std::cout << " reader size22  : " << readers.size() << std::endl;
   auto& datablocks = datablocks_batch.back();
   auto& seek_indices = seek_indices_batch.back();
   auto& total_entries = total_entries_batch.back();
   
   std::cout << "[RudaRecordBlockManager][translatePairsToSlices] before values num : " << (*get_context->val_ptr()).size() << std::endl;
   Status s = Status::OK();
+  int err = accelerator::ACC_ERR;
   if (seek_indices.size() < options.threshold_seek_indices_size) {
   std::cout << " [ValueFilterAVX] called " << std::endl;
     s = _ValueFilterAVX(
-        options, k, schema_k, get_context, readers, reader_skip_filters,
-        prefix_extractor);        
+        options, k, schema_k, get_context, temp_readers, reader_skip_filters,
+        prefix_extractor); 
+    err = accelerator::ACC_OK;
+  } else {
+    err = ruda::recordBlockFilter(
+        datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
+        *get_context->val_ptr());
   }
-
-  int err = ruda::recordBlockFilter(
-      datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
-      *get_context->val_ptr());
     
   datablocks_batch.pop_back();
   seek_indices_batch.pop_back();

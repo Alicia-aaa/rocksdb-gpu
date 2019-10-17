@@ -2765,7 +2765,7 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
     bool done = false;
     std::vector<Slice> records;
     std::vector<PinnableSlice> k_records;
-
+    
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       BlockHandle handle = iiter->value();
       bool not_exist_in_filter =
@@ -2820,13 +2820,25 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
           done = true;
           break;
         }
-
+        
+        //k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         records.emplace_back(biter.value().data_, biter.value().size_);
-//        std::cout << "[BlockBasedTable::AvxFilter] Data: "
-//            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
-//            << std::endl;
+
       }
+      
+      if (schema_key.getTarget() != -1) {
+        //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+        avx::recordFilterWithKey(k_records,
+           records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
+      } else {
+        //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+        for(uint i = 0; i < k_records.size(); i++) {
+          get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
+          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
+        }    
+      }
+      
       s = biter.status();
 
       if (done) {
@@ -2834,27 +2846,6 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
         break;
       }
     }
-
-    if (schema_key.getTarget() != -1) {
-      //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-      avx::recordFilterWithKey(k_records,
-          records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
-    } else {
-      //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
-//      for (auto &record : records) {
-//        get_context->val_ptr()->emplace_back(
-//            std::move(PinnableSlice(record.data_, record.size_)));
-//      }
-      for(uint i = 0; i < k_records.size(); i++) {
-          get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
-          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
-      }    
-    }
-//    for (auto &result : *get_context->val_ptr()) {
-//      //long col_value = accelerator::convertRecord(schema_key, result.data_);
-//      accelerator::convertRecord(schema_key, result.data_);
-//      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
-//    }
 
     if (s.ok()) {
       s = iiter->status();
@@ -2969,26 +2960,27 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
           done = true;
           break;
         }
-
-
+        
+        //k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         k_records.emplace_back(std::move(PinnableSlice(parsed_key.user_key.data_, parsed_key.user_key.size_)));
         records.emplace_back(biter.value().data_, biter.value().size_);
-        
-//        std::cout << "[BlockBasedTable::AvxFilter] Data: "
-//            << std::string(records[records.size() - 1].data_, records[records.size() - 1].size_)
-//            << std::endl;
+                
       }
       s = biter.status();
       break;
     }
-//    std::cout << "Next Error " << done << std::endl;
-//    std::cout << "itter key " << iiter->key().ToString(1) << std::endl;
-//    if(iiter->Valid()) {
-//        iiter->Next();
-//        *(get_context->key_ptr()) = iiter->key();
-//    } else {
-//        s = Status::TableEnd();
-//    }
+    
+    if (schema_key.getTarget() != -1) {
+//    std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+      avx::recordFilterWithKey(k_records,
+          records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
+    } else {
+//      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+      for(uint i = 0; i < k_records.size(); i++) {
+        get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
+        get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
+      }            
+    }
 
     iiter->Next();
     if(iiter->Valid() && !done) {
@@ -2997,30 +2989,7 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
     } else { 
         s = Status::TableEnd(); 
     }
-
-    if (schema_key.getTarget() != -1) {
-//      std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-      avx::recordFilterWithKey(k_records,
-          records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
-    } else {
-//      std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
-//      for (auto &record : records) {
-//        get_context->val_ptr()->emplace_back(
-//            std::move(PinnableSlice(record.data_, record.size_)));
-//      }
-        for(uint i = 0; i < k_records.size(); i++) {
-            get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
-            get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
-        }            
-    }
-    
-    
-//    for (auto &result : *get_context->val_ptr()) {
-//      //long col_value = accelerator::convertRecord(schema_key, result.data_);
-//      accelerator::convertRecord(schema_key, result.data_);
-//      // std::cout << "[BlockBasedTable::AvxFilter] Filtered result: " << col_value << std::endl;
-//    }
-
+   
     if (s.ok()) {
       s = iiter->status();
     }

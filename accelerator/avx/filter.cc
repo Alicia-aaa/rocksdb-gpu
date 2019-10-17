@@ -251,7 +251,6 @@ int recordFilterWithKey(std::vector<rocksdb::PinnableSlice> &k_records, std::vec
                  const rocksdb::SlicewithSchema &schema_key,
                  std::vector<rocksdb::PinnableSlice> &keys,
                  std::vector<rocksdb::PinnableSlice> &results) {
-  // printf("[AVX][recordIntFilter] START raw_record_size: %lu\n", raw_records.size());
   uint64_t pivot = static_cast<uint64_t>(schema_key.context._pivot);
   int size = (int) raw_records.size();
 
@@ -330,7 +329,7 @@ int recordFilterWithKey(std::vector<rocksdb::PinnableSlice> &k_records, std::vec
         result = _mm256_xor_si256(eq, mask);
         break;
       }
-      case accelerator::MATCH: {
+      case accelerator::STRMATCH: {
         result = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0);
         for(int k = 0; k < schema_key.context.str_num; ++k) {
           uint64_t hpivot = static_cast<uint64_t>(schema_key.context.pivots[k]);

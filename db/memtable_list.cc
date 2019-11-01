@@ -114,6 +114,7 @@ bool MemTableListVersion::Get(const LookupKey& key, std::string* value,
 }
 
 bool MemTableListVersion::ValueFilter(const LookupKey& key,
+                                      std::vector<PinnableSlice> &keys,
                                       std::vector<PinnableSlice> &value,
                                       Status* s, MergeContext* merge_context,
                                       SequenceNumber* max_covering_tombstone_seq,
@@ -121,7 +122,7 @@ bool MemTableListVersion::ValueFilter(const LookupKey& key,
                                       const ReadOptions& read_opts,
                                       ReadCallback* callback,
                                       bool* is_blob_index) {
-  return ValueFilterFromList(&memlist_, key, value, s, merge_context,
+  return ValueFilterFromList(&memlist_, key, keys, value, s, merge_context,
                              max_covering_tombstone_seq, seq, read_opts,
                              callback, is_blob_index);
 }
@@ -171,7 +172,7 @@ bool MemTableListVersion::GetFromList(
 }
 
 bool MemTableListVersion::ValueFilterFromList(
-    std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice> &value,
+    std::list<MemTable*>* list, const LookupKey& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &value,
     Status* s, MergeContext* merge_context,
     SequenceNumber* max_covering_tombstone_seq, SequenceNumber* seq,
     const ReadOptions& read_opts, ReadCallback* callback, bool* is_blob_index) {
@@ -181,7 +182,7 @@ bool MemTableListVersion::ValueFilterFromList(
     SequenceNumber current_seq = kMaxSequenceNumber;
 
     bool done =
-        memtable->ValueFilter(key, value, s, merge_context,
+        memtable->ValueFilter(key, keys, value, s, merge_context,
                               max_covering_tombstone_seq, &current_seq,
                               read_opts, callback, is_blob_index);
     if (*seq == kMaxSequenceNumber) {

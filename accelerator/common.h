@@ -40,6 +40,7 @@ inline std::string toStringOperator(Operator op) {
 struct FilterContext {
   Operator _op;
   long _pivot;
+  int comp_field;
   int str_num;
   char cpivot[10][32];
   long long pivots[10];

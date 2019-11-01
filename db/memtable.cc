@@ -581,6 +581,7 @@ struct Saver {
   bool* merge_in_progress;
   std::string* value;
   /*GPU accelerator*/
+  std::vector<PinnableSlice> * keys;
   std::vector<PinnableSlice> * values;
   SequenceNumber seq;
   const MergeOperator* merge_operator;
@@ -809,6 +810,7 @@ static bool SaveValueOnAccFilter(void* arg, const char* entry) {
               merge_context->GetOperands(), s->value, s->logger,
               s->statistics, s->env_, nullptr /* result_operand */, true);
         } else if (s->values != nullptr) {
+          s->keys->emplace_back(std::move(PinnableSlice(key_ptr, key_length)));
           s->values->emplace_back(std::move(PinnableSlice(v.data(), v.size())));
         }
         if (s->inplace_update_support) {
@@ -939,7 +941,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s,
 
 /*GPU Accelerator*/
 bool MemTable::ValueFilter(const LookupKey& key,
-                           std::vector<PinnableSlice>& value, Status* s,
+                           std::vector<PinnableSlice>& keys, std::vector<PinnableSlice>& value, Status* s,
                            MergeContext* merge_context,
                            SequenceNumber* max_covering_tombstone_seq,
                            SequenceNumber* seq, const ReadOptions& read_opts,
@@ -980,7 +982,7 @@ bool MemTable::ValueFilter(const LookupKey& key,
     saver.found_final_value = &found_final_value;
     saver.merge_in_progress = &merge_in_progress;
     saver.key = &key;
-    //saver.value = value;
+    saver.keys = &keys;
     saver.values = &value;
     saver.seq = kMaxSequenceNumber;
     saver.mem = this;

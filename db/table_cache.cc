@@ -702,7 +702,8 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
 
       total_entries += reader->GetTableProperties()->num_entries;
       uint64_t load_size =
-          datablocks.size() + (sizeof(uint64_t) * seek_indices.size());  
+          datablocks.size() + (sizeof(uint64_t) * seek_indices.size());
+ 
       readers.pop_back();  
       reader_skip_filters.pop_back();
       rend = std::chrono::high_resolution_clock::now();
@@ -723,7 +724,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   Status s = Status::OK();
   int err = accelerator::ACC_ERR;
   if (seek_indices.size() < options.threshold_seek_indices_size) {
-  std::cout << " [ValueFilterAVX] called " << std::endl;
+    std::cout << " [ValueFilterAVX] called " << std::endl;
     s = _ValueFilterAVX(
         options, k, schema_k, get_context, temp_readers, reader_skip_filters,
         prefix_extractor); 
@@ -733,6 +734,13 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
         datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
         *get_context->val_ptr());
   }
+  
+  for (auto temp_reader : temp_readers) {
+     temp_reader->Close();  
+  }
+  temp_readers.clear();                    
+  datablocks.clear();
+  seek_indices.clear();
     
   datablocks_batch.pop_back();
   seek_indices_batch.pop_back();
@@ -784,6 +792,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
       /* assume file size is 64 MB (default option) */
       load_size += 64 * 1024 * 1024;
 
+      reader->Close();
       fileList.pop_back();
       readers.pop_back();
 

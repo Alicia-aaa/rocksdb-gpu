@@ -1416,14 +1416,14 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   bool skip_memtable = (read_options.read_tier == kPersistedTier &&
                         has_unpersisted_data_.load(std::memory_order_relaxed));
-  if (!skip_memtable) {
-    sv->mem->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+  if (!skip_memtable || pinnable_val.size() == 0) {
+    sv->mem->ValueFilter(lkey, keys, pinnable_val, &s, &merge_context,
                          &max_covering_tombstone_seq, read_options,
                          callback, is_blob_index);
     if (s.ok()) {
       RecordTick(stats_, MEMTABLE_HIT);
     }
-    sv->imm->ValueFilter(lkey, pinnable_val, &s, &merge_context,
+    sv->imm->ValueFilter(lkey, keys, pinnable_val, &s, &merge_context,
                          &max_covering_tombstone_seq, read_options,
                          callback, is_blob_index);
     if (s.ok()) {

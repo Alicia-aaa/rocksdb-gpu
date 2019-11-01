@@ -1502,6 +1502,42 @@ void Version::donardFilter(const ReadOptions& read_options,
   std::vector<bool> fd_skip_filters;
   std::vector<int> fd_levels;
   
+  std::cout<<"[FilePicker Process] : " << user_key.ToString(1) <<std::endl;
+  std::cout<<"[FilePicker For] : " << storage_info_.num_non_empty_levels_ << std::endl;
+  int num_file = 0;
+  int num_file_lv0 = 0;
+  int num_file_lv1 = 0;
+  int num_file_lv2 = 0;  
+  int num_file_lv3 = 0;
+  
+  for(int i = 0; i < storage_info_.num_non_empty_levels_; i++) {
+      std::cout << i << "th level file num = " << storage_info_.level_files_brief_[i].num_files << std::endl;
+      for(size_t j = 0; j < storage_info_.level_files_brief_[i].num_files; j++) {
+        int compare_smallest = user_comparator()->Compare(user_key, Slice(storage_info_.level_files_brief_[i].files[j].smallest_key.data_, 4));
+        int compare_largest = user_comparator()->Compare(user_key, Slice(storage_info_.level_files_brief_[i].files[j].largest_key.data_, 4));
+        if (compare_smallest >= 0 && compare_largest <= 0 ) {
+            num_file++;
+            
+            if(i == 0) num_file_lv0++;
+            if(i == 1) num_file_lv1++;
+            if(i == 2) num_file_lv2++;
+            if(i == 3) num_file_lv3++;
+            
+//            std::cout<<"[FilePicker Range] num : "<<storage_info_.level_files_brief_[i].files[j].fd.packed_number_and_path_id << " : " 
+//                  << storage_info_.level_files_brief_[i].files[j].largest_key.ToString(1) << " ~ " 
+//                  << storage_info_.level_files_brief_[i].files[j].smallest_key.ToString(1) <<std::endl;
+        }
+      }
+  }
+  std::cout << " num_file = " << num_file << std::endl;
+  std::cout << " lv0 = " << num_file_lv0 << std::endl;
+  std::cout << " lv1 = " << num_file_lv1 << std::endl;
+  std::cout << " lv2 = " << num_file_lv2 << std::endl;
+  std::cout << " lv3 = " << num_file_lv3 << std::endl;
+        
+  std::cout<<"[FilePicker While]" <<std::endl;
+  
+  
   if (!table_cache_->fileList.size()) {
     int check;
     check = pinpool_init(1, 67108864);

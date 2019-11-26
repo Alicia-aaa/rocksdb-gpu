@@ -2827,24 +2827,25 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
 
       }
       
-      if (schema_key.getTarget() != -1) {
-        //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
-        avx::recordFilterWithKey(k_records,
-           records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
-      } else {
-        //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
-        for(uint i = 0; i < k_records.size(); i++) {
-          get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
-          get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
-        }    
-      }
-      
+     
       s = biter.status();
 
       if (done) {
         // Avoid the extra Next which is expensive in two-level indexes
         break;
       }
+    }
+    
+    if (schema_key.getTarget() != -1) {
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
+      avx::recordFilterWithKey(k_records,
+         records, schema_key, *get_context->keys_ptr(), *get_context->val_ptr());
+    } else {
+      //std::cout << "[BlockBasedTable::AvxFilter] Schema has no target" << std::endl;
+      for(uint i = 0; i < k_records.size(); i++) {
+        get_context->keys_ptr()->emplace_back(std::move(PinnableSlice(k_records[i].data_, k_records[i].size_)));
+        get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
+      }    
     }
 
     if (s.ok()) {

@@ -211,7 +211,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
   /*GPU Accelerator*/
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
-                                   const SlicewithSchema& key,
+                                   SlicewithSchema& key,
                                    std::vector<PinnableSlice> &keys,
                                    std::vector<PinnableSlice>& values, char **data_buf, uint64_t *num_entries, int join_idx);
   
@@ -261,7 +261,7 @@ class WriteBatchWithIndex : public WriteBatchBase {
 
   Status ValueFilterFromBatchAndDB(DB* db, const ReadOptions& read_options,
                                    ColumnFamilyHandle* column_family,
-                                   const SlicewithSchema& key,
+                                   SlicewithSchema& key,
                                    std::vector<PinnableSlice> &keys,
                                    std::vector<PinnableSlice> &values, char **data_buf, uint64_t *num_entries, int join_idx,
                                    ReadCallback* callback);

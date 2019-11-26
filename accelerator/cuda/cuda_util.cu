@@ -107,6 +107,9 @@ long rudaConvertRecord(RudaSchema *schema, const char *record_ptr, char * pivot)
   if (target_type == 14 ) { // Date type
     result = uint3korr(record_ptr);
   } else if (target_type == 3 ) { // Long type
+    /* For YCSB */
+    //result = sint4korr(record_ptr + 2);
+    /* For General */
     result = sint4korr(record_ptr);
   } else if (target_type == 4 ) { // float type : require to check validity
     result = float4korr(record_ptr);

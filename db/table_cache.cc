@@ -496,7 +496,7 @@ Status _ValueFilterAVX(const ReadOptions& options,
                        const SliceTransform *prefix_extractor) {
   Status s;
   size_t i = 0;
-  std::cout << "valueFilt AVX reader : " << readers.size() << std::endl;
+  //std::cout << "valueFilt AVX reader : " << readers.size() << std::endl;
   for (i = 0; i < readers.size(); ++i) {
     TableReader *reader = readers[i];
     bool skip_filters = reader_skip_filters[i];
@@ -673,7 +673,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   // Splits readers by GPU-loadable size.
   uint64_t gpu_loadable_size = 13ULL << 30; // 3GB 
  
-  std::cout << " reader size11  : " << readers.size() << std::endl;
+  //std::cout << " reader size11  : " << readers.size() << std::endl;
   
   if(!readers.size()) return Status::NotFound();
   
@@ -715,16 +715,15 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
           break;
       }
   }          
-  std::cout << " reader size22  : " << readers.size() << std::endl;
+  //std::cout << " reader size22  : " << readers.size() << std::endl;
   auto& datablocks = datablocks_batch.back();
   auto& seek_indices = seek_indices_batch.back();
   auto& total_entries = total_entries_batch.back();
   
-  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] before values num : " << (*get_context->val_ptr()).size() << std::endl;
+  //std::cout << "[RudaRecordBlockManager][translatePairsToSlices] before values num : " << (*get_context->val_ptr()).size() << std::endl;
   Status s = Status::OK();
   int err = accelerator::ACC_ERR;
   if (seek_indices.size() < options.threshold_seek_indices_size) {
-    std::cout << " [ValueFilterAVX] called " << std::endl;
     s = _ValueFilterAVX(
         options, k, schema_k, get_context, temp_readers, reader_skip_filters,
         prefix_extractor); 
@@ -735,18 +734,18 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
         *get_context->val_ptr());
   }
   
-  for (auto temp_reader : temp_readers) {
-     temp_reader->Close();  
-  }
-  temp_readers.clear();                    
-  datablocks.clear();
-  seek_indices.clear();
+//  for (auto temp_reader : temp_readers) {
+//     temp_reader->Close();  
+//  }
+//  temp_readers.clear();                    
+//  datablocks.clear();
+//  seek_indices.clear();
     
   datablocks_batch.pop_back();
   seek_indices_batch.pop_back();
   total_entries_batch.pop_back();
     
-  std::cout << "[RudaRecordBlockManager][translatePairsToSlices] after values num : " << (*get_context->val_ptr()).size() << std::endl;
+ // std::cout << "[RudaRecordBlockManager][translatePairsToSlices] after values num : " << (*get_context->val_ptr()).size() << std::endl;
   if (err == accelerator::ACC_ERR) {
     return Status::Aborted();
   }     
@@ -766,7 +765,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
   // Splits readers by GPU-loadable size.
   uint64_t gpu_loadable_size = 8ULL << 30; // 13GB 
  
-  std::cout << " fileList size  : " << fileList.size() << std::endl;
+ // std::cout << " fileList size  : " << fileList.size() << std::endl;
   
     // Pin Memory for DMA 
   if(!fileList.size()) return Status::NotFound();
@@ -811,8 +810,8 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
   }
   */
 //  for(uint i = 0; i < handles.size(); i++) std::cout << " handle === " << handles[i] << std::endl;
-  std::cout << " handles size = " << handles.size() << std::endl;
-  std::cout << " block num = " << num_blocks.back() << std::endl;
+  //std::cout << " handles size = " << handles.size() << std::endl;
+ // std::cout << " block num = " << num_blocks.back() << std::endl;
 
   int err = ruda::donardFilter(file_input, num_blocks, handles, schema_k, total_entries, *get_context->keys_ptr(), 
           *get_context->val_ptr(), get_context->data_buf_ptr(), get_context->entry_ptr());

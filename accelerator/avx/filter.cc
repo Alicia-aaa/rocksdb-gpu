@@ -172,6 +172,7 @@ int recordFilter(std::vector<rocksdb::Slice> &raw_records,
   for (int i = 0; i < rounded_size; i += 8) {
     // printf("[AVX][recordIntFilter] Break Point 3-1\n");
     // printf("[AVX][recordIntFilter] Size: %lu, Raw Record: ", raw_records[i].size_);
+                   
     __m256i sources = _mm256_set_epi32(
         accelerator::convertRecord(schema_key, raw_records[i].data_),
         accelerator::convertRecord(schema_key, raw_records[i+1].data_),
@@ -286,6 +287,15 @@ int recordFilterWithKey(std::vector<rocksdb::PinnableSlice> &k_records, std::vec
   for (int i = 0; i < rounded_size; i += 8) {
     // printf("[AVX][recordIntFilter] Break Point 3-1\n");
     // printf("[AVX][recordIntFilter] Size: %lu, Raw Record: ", raw_records[i].size_);
+//        std::cout << "value " << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+1].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+2].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+3].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+4].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+5].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+6].data_) << std::endl <<
+//        accelerator::convertRecord(schema_key, raw_records[i+7].data_) << std::endl;
+        
     __m256i sources = _mm256_set_epi32(
         accelerator::convertRecord(schema_key, raw_records[i].data_),
         accelerator::convertRecord(schema_key, raw_records[i+1].data_),

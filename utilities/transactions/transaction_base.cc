@@ -216,7 +216,7 @@ Status TransactionBaseImpl::Get(const ReadOptions& read_options,
 
 Status TransactionBaseImpl::ValueFilter(const ReadOptions& read_options,
                                         ColumnFamilyHandle* column_family,
-                                        const SlicewithSchema& key,
+                                        SlicewithSchema& key,
                                         std::vector<PinnableSlice> &keys,
                                         std::vector<PinnableSlice> &pinnable_values, char **data_buf, uint64_t *num_entries, int join_idx) {
   return write_batch_.ValueFilterFromBatchAndDB(db_, read_options,

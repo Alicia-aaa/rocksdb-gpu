@@ -926,14 +926,14 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    const SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx) {
+    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx) {
   return ValueFilterFromBatchAndDB(
       db, read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, nullptr);
 }
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    const SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx,
+    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx,
     ReadCallback* callback) {
   Status s;
   // Did not find key in batch OR could not resolve Merges.  Try DB.

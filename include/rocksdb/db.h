@@ -346,7 +346,7 @@ class DB {
   /* GPU Accelerator */
   virtual Status ValueFilter(const ReadOptions& /*options*/,
                              ColumnFamilyHandle* /*column_family*/,
-                             const SlicewithSchema& /*key*/,
+                             SlicewithSchema& /*key*/,
                              std::vector<PinnableSlice>& /*keys*/,
                              std::vector<PinnableSlice>& /*value*/,
                              char ** /*data_buf*/,

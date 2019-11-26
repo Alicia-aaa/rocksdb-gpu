@@ -282,6 +282,7 @@ class SlicewithSchema : public Slice, public Cleanable {
     std::copy(type.begin(), type.end(), std::back_inserter(field_type));
     std::copy(length.begin(), length.end(), std::back_inserter(field_length));
     std::copy(skip.begin(), skip.end(), std::back_inserter(field_skip));
+    set = false;
   }
 
   SlicewithSchema* clone() const {
@@ -342,6 +343,7 @@ class SlicewithSchema : public Slice, public Cleanable {
   std::vector<uint> field_type;
   std::vector<uint> field_length;
   std::vector<uint> field_skip;
+  bool set;
 };
 
 // A set of Slices that are virtually concatenated together.  'parts' points

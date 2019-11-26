@@ -105,8 +105,8 @@ struct RudaRecordBlockContext {
         (void **) &d_results_idx, sizeof(unsigned long long int)));
     total_gpu_used_memory += sizeof(unsigned long long int);
     // NEED TO OPTIMIZE    
-    //kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
-    kApproxResultsCount = (kMaxResultsCount / kStreamCount) + (kMaxResultsCount % kStreamCount);
+    kApproxResultsCount = kMaxResultsCount / (kStreamCount - 1);
+    //kApproxResultsCount = (kMaxResultsCount / kStreamCount) + (kMaxResultsCount % kStreamCount);
     cudaCheckError(cudaMalloc(
         (void **) &d_results, sizeof(RudaKVIndexPair) * kApproxResultsCount));
     total_gpu_used_memory += sizeof(RudaKVIndexPair) * kApproxResultsCount;
@@ -527,6 +527,8 @@ struct RudaRecordBlockManager {
                                std::vector<rocksdb::Slice> &sub_keys,
                                std::vector<rocksdb::Slice> &sub_values) {
     unsigned long long int count = *ctx.h_results_count;
+    //std::cout << "count : " << count << std::endl;
+
     for (size_t i = 0; i < count; ++i) {
       RudaKVIndexPair &result = ctx.h_results[i];
            
@@ -536,6 +538,7 @@ struct RudaRecordBlockManager {
           result.value_index_.end_ - result.value_index_.start_;
       sub_values.emplace_back(
           &datablocks[0] + result.value_index_.start_, value_size);
+      //std::cout << "key size and value size : " << result.key_size << " : " << value_size << std::endl;
     }
   }
 
@@ -593,8 +596,8 @@ struct RudaRecordBlockManager {
 
     pend = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float, std::milli> pelapsed = pend - pbegin;
-    std::cout << "[GPU][translatePairsToSlices] Slice Execution Time : "
-        << selapsed.count() << " PSlice Execution Time : " << pelapsed.count() << std::endl;
+    //std::cout << "[GPU][translatePairsToSlices] Slice Execution Time : "
+      //  << selapsed.count() << " PSlice Execution Time : " << pelapsed.count() << std::endl;
   }
 
   void log() {
@@ -727,7 +730,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       const size_t max_results_count,
                       std::vector<rocksdb::PinnableSlice> &keys,
                       std::vector<rocksdb::PinnableSlice> &values) {
-  std::cout << "[GPU][recordBlockFilter] START" << std::endl;
+  //std::cout << "[GPU][recordBlockFilter] START" << std::endl;
   if (seek_indices.size() < 256) {
     // Not allowed small size seek_indices... (Meaningless on GPU)
     return accelerator::ACC_ERR;

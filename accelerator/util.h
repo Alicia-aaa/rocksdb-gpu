@@ -13,7 +13,9 @@
 
 
 #define sint4korr(A)    (int)  (*((int *) (A)))
+#define uint4korr(A)	(unsigned int) (*((unsigned int *) (A)))
 #define uint3korr(A)    (unsigned int) (*((unsigned int *) (A)) & 0xFFFFFF)
+
 
 
 namespace accelerator {
@@ -81,6 +83,7 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
       record_ptr += (schema_key.getLength(i) + schema_key.getSkip(i));
     }
   }
+
   record_ptr += schema_key.getSkip(target_idx);
   // printf("[util.h][convertRecord] After skip other columns\n");
   if(schema_key.getType(target_idx) == 14) { // DATE type
@@ -93,7 +96,15 @@ inline long convertRecord(const rocksdb::SlicewithSchema &schema_key,
     // long test = (result % 32L) + (result / 32L % 16L) * 100L + (result/(16L*32L)) * 10000L;
     // printf("[util.h][convertRecord] test: %ld\n", test);
   } else if (schema_key.getType(target_idx) == 3 ) { // Long Type
+    /* For YCSB */
+    //result = sint4korr((unsigned char*)record_ptr+2);
+    //    std::cout << "result1 : " << result << std::endl;
+    //result = sint4korr(record_ptr);
+    //    std::cout << "result2 : " << result << std::endl;
+    /* General Case */
     result = sint4korr((unsigned char*)record_ptr);
+     //   std::cout << "result3 : " << result << std::endl;
+
   } else if (schema_key.getType(target_idx) == 4 ) {
     result = sint4korr(record_ptr);
   } else  if (schema_key.getType(target_idx) == 254 ) {

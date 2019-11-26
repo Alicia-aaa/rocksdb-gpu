@@ -410,6 +410,7 @@ void DecodeNFilterOnSchema(// Parameters
 
     char pivot[32] = {0,};
     long decoded_value = rudaConvertRecord(schema, value, pivot);
+    //printf("decoded_value : %d\n", decoded_value);
 //    for(int i = 0; i < schema->ctx.str_num; ++i) {
 //      printf("pivot : %s\n" , schema->ctx.cpivot[i]);
 //    }

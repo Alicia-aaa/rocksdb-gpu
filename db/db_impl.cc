@@ -1214,7 +1214,7 @@ Status DBImpl::Get(const ReadOptions& read_options,
 /* GPU Accelerator */
 Status DBImpl::ValueFilter(const ReadOptions& read_options,
                            ColumnFamilyHandle* column_family,
-                           const SlicewithSchema& key,
+                           SlicewithSchema& key,
                            std::vector<PinnableSlice> &keys,
                            std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, int join_idx) {
   return ValueFilterImpl(read_options, column_family, key, keys, value, data_buf, num_entries, join_idx);
@@ -1344,7 +1344,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 
 Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                                ColumnFamilyHandle* column_family,
-                               const SlicewithSchema& key,
+                               SlicewithSchema& key,
                                std::vector<PinnableSlice> &keys,
                                std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx,
                                bool* value_found,
@@ -1416,7 +1416,7 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
 
   bool skip_memtable = (read_options.read_tier == kPersistedTier &&
                         has_unpersisted_data_.load(std::memory_order_relaxed));
-  if (!skip_memtable || pinnable_val.size() == 0) {
+  if (!skip_memtable && key.set == false) {
     sv->mem->ValueFilter(lkey, keys, pinnable_val, &s, &merge_context,
                          &max_covering_tombstone_seq, read_options,
                          callback, is_blob_index);
@@ -1433,6 +1433,8 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
       ReturnAndCleanupSuperVersion(cfd, sv);
       return s;
     }
+    
+    key.set = true;
   }
 
   PERF_TIMER_GUARD(get_from_output_files_time);
@@ -1447,7 +1449,7 @@ Status DBImpl::ValueFilterImpl(const ReadOptions& read_options,
                               value_found, nullptr, nullptr, callback,
                               is_blob_index);
   } else  {
-    std::cout << "ValueFilter Called " << std::endl;
+    //std::cout << "ValueFilter Called " << std::endl;
     sv->current->ValueFilter(read_options, lkey, key, keys, pinnable_val, data_buf, num_entries, &s,
                               &merge_context, &max_covering_tombstone_seq,
                               value_found, nullptr, nullptr, callback,

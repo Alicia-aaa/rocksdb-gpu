@@ -729,7 +729,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       const rocksdb::SlicewithSchema &schema,
                       const size_t max_results_count,
                       std::vector<rocksdb::PinnableSlice> &keys,
-                      std::vector<rocksdb::PinnableSlice> &values) {
+                      std::vector<rocksdb::PinnableSlice> &values, double* pushdown_evaluate) {
   //std::cout << "[GPU][recordBlockFilter] START" << std::endl;
   if (seek_indices.size() < 256) {
     // Not allowed small size seek_indices... (Meaningless on GPU)
@@ -786,10 +786,22 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
 //  
 //  cudaMemGetInfo(&free_byte, &total_byte);
 //  std::cout << "[GPU] Memory after copy Free : " << free_byte << " / " << total_byte << std::endl;
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  cudaEventRecord(start);
   block_mgr.executeKernels(datablocks.size());
+  cudaEventRecord(stop);
+
   block_mgr.copyFromCuda();
   // ----------------------------------------------
   block_mgr.translatePairsToSlices(datablocks, keys, values);
+
+  cudaEventSynchronize(stop);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+
   block_mgr.unregisterPinnedMemory(datablocks, seek_indices, *copied_schema);
   block_mgr.clear();
   delete copied_schema;
@@ -797,6 +809,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
 //  cudaMemGetInfo(&free_byte, &total_byte);
 //  std::cout << "[GPU] Memory after free Free : " << free_byte << " / " << total_byte << std::endl;
 
+  *pushdown_evaluate = (double) milliseconds;
   return accelerator::ACC_OK;
 }
 

@@ -641,6 +641,8 @@ class Version {
                    std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, Status* status,
                    MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
+                   double* pushdown_evaluate,
+                   double* data_transfer,
                    bool* value_found = nullptr, bool* key_exists = nullptr,
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);
@@ -650,7 +652,7 @@ class Version {
                    std::vector<PinnableSlice> &keys,
                    std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, Status* status,
                    MergeContext* merge_context,
-                   SequenceNumber* max_covering_tombstone_seq,
+                   SequenceNumber* max_covering_tombstone_seq, double* pushdown_evaluate, double* data_transfer,
                    bool* value_found = nullptr, bool* key_exists = nullptr,
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);
@@ -660,7 +662,7 @@ class Version {
                    std::vector<PinnableSlice> &keys,
                    std::vector<PinnableSlice> &value, Status* status,
                    MergeContext* merge_context,
-                   SequenceNumber* max_covering_tombstone_seq, int join_idx,
+                   SequenceNumber* max_covering_tombstone_seq, int join_idx, double *pushdown_evaluate,
                    bool* value_found = nullptr, bool* key_exists = nullptr,
                    SequenceNumber* seq = nullptr,
                    ReadCallback* callback = nullptr, bool* is_blob = nullptr);

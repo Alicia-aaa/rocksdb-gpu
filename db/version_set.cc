@@ -1390,6 +1390,8 @@ void Version::ValueFilter(const ReadOptions& read_options,
                           Status* status,
                           MergeContext* merge_context,
                           SequenceNumber* max_covering_tombstone_seq,
+                          double* pushdown_evaluate,
+                          double* data_transfer,
                           bool* value_found, bool* key_exists,
                           SequenceNumber* seq, ReadCallback* callback,
                           bool* is_blob) {
@@ -1460,7 +1462,7 @@ void Version::ValueFilter(const ReadOptions& read_options,
   *status = table_cache_->ValueFilter(
       read_options, *internal_comparator(), ikey, schema_k, &get_context,
       mutable_cf_options_.prefix_extractor.get(), table_related_files_, fd_read_hists,
-      fd_skip_filters, fd_levels);
+      fd_skip_filters, fd_levels, pushdown_evaluate, data_transfer);
 
   if (key_exists != nullptr)
       *key_exists = false;
@@ -1471,7 +1473,7 @@ void Version::donardFilter(const ReadOptions& read_options,
                           std::vector<PinnableSlice> &keys,
                           std::vector<PinnableSlice> &value, char **data_buf, uint64_t *num_entries, Status* status,
                           MergeContext* merge_context,
-                          SequenceNumber* max_covering_tombstone_seq,
+                          SequenceNumber* max_covering_tombstone_seq, double* pushdown_evaluate, double* data_transfer,
                           bool* value_found, bool* key_exists,
                           SequenceNumber* seq, ReadCallback* callback,
                           bool* is_blob) {
@@ -1585,7 +1587,7 @@ void Version::donardFilter(const ReadOptions& read_options,
   *status = table_cache_->donardFilter(
       read_options, *internal_comparator(), ikey, schema_k, &get_context,
       mutable_cf_options_.prefix_extractor.get(), table_related_files_, fd_read_hists,
-      fd_skip_filters, fd_levels);
+      fd_skip_filters, fd_levels, pushdown_evaluate, data_transfer);
 
   if (key_exists != nullptr)
       *key_exists = false;
@@ -1596,7 +1598,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
                           std::vector<PinnableSlice> &keys,
                           std::vector<PinnableSlice> &value, Status* status,
                           MergeContext* merge_context,
-                          SequenceNumber* max_covering_tombstone_seq, int join_idx,
+                          SequenceNumber* max_covering_tombstone_seq, int join_idx, double *pushdown_evaluate,
                           bool* value_found, bool* key_exists,
                           SequenceNumber* seq, ReadCallback* callback,
                           bool* is_blob) {
@@ -1734,7 +1736,7 @@ void Version::ValueFilterBlock(const ReadOptions& read_options,
   *status = table_cache_->ValueFilterBlock(
       read_options, *internal_comparator(), ikey, schema_k, &get_context,
       mutable_cf_options_.prefix_extractor.get(), storage_info_.table_related_files_[join_idx], storage_info_.fd_read_hists[join_idx],
-      storage_info_.fd_skip_filters[join_idx], storage_info_.fd_levels[join_idx]);
+      storage_info_.fd_skip_filters[join_idx], storage_info_.fd_levels[join_idx], pushdown_evaluate);
 
 //  for(uint i = 0; i < 5; i++) {
 //    std::cout << "key_to_find after ValueFilter " << i << " key : " << key_to_find[i]->ToString(1) << std::endl;

@@ -67,7 +67,7 @@ class TransactionBaseImpl : public Transaction {
                      ColumnFamilyHandle* column_family,
                      SlicewithSchema& key,
                      std::vector<PinnableSlice> &keys,
-                     std::vector<PinnableSlice> &values, char **data_buf, uint64_t *num_entries, int join_idx) override;
+                     std::vector<PinnableSlice> &values, char **data_buf, uint64_t *num_entries, int join_idx, double *pushdown_evaluate, double *data_transfer) override;
   
   using Transaction::AsyncFilter;
   Status AsyncFilter(ColumnFamilyHandle* column_family,

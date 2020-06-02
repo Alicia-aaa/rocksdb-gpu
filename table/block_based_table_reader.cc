@@ -2863,11 +2863,18 @@ Status BlockBasedTable::AvxFilter(const ReadOptions& read_options,
   return s;
 }
 
+double get_time_avx() {
+  struct timeval tv_now;
+  gettimeofday(&tv_now, NULL);
+
+  return (double)tv_now.tv_sec*1000UL + (double)tv_now.tv_usec/1000UL;
+}
+
 Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
                                   const Slice& key,
                                   const SlicewithSchema& schema_key,
                                   GetContext* get_context,
-                                  const SliceTransform* prefix_extractor,
+                                  const SliceTransform* prefix_extractor, double *pushdown_evaluate,
                                   bool skip_filters) {
   assert(key.size() >= 8);  // key must be internal key
   Status s;
@@ -2971,6 +2978,7 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
       break;
     }
     
+    double filter_start = get_time_avx();
     if (schema_key.getTarget() != -1) {
 //    std::cout << "[BlockBasedTable::AvxFilter] Schema has target" << std::endl;
       avx::recordFilterWithKey(k_records,
@@ -2982,6 +2990,7 @@ Status BlockBasedTable::AvxFilterBlock(const ReadOptions& read_options,
         get_context->val_ptr()->emplace_back(std::move(PinnableSlice(records[i].data_, records[i].size_)));
       }            
     }
+    *pushdown_evaluate = (get_time_avx() - filter_start);
 
     iiter->Next();
     if(iiter->Valid() && !done) {

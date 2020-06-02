@@ -926,22 +926,24 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx) {
+    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, 
+    char** data_buf, uint64_t* num_entries, int join_idx, double* pushdown_evaluate, double* data_transfer) {
   return ValueFilterFromBatchAndDB(
-      db, read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, nullptr);
+      db, read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, pushdown_evaluate, data_transfer, nullptr);
 }
 
 Status WriteBatchWithIndex::ValueFilterFromBatchAndDB(
     DB* db, const ReadOptions& read_options, ColumnFamilyHandle* column_family,
-    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, char **data_buf, uint64_t *num_entries, int join_idx,
+    SlicewithSchema& key, std::vector<PinnableSlice> &keys, std::vector<PinnableSlice> &pinnable_val, 
+    char** data_buf, uint64_t* num_entries, int join_idx, double* pushdown_evaluate, double* data_transfer,
     ReadCallback* callback) {
   Status s;
   // Did not find key in batch OR could not resolve Merges.  Try DB.
   if (!callback) {
-    s = db->ValueFilter(read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx);
+    s = db->ValueFilter(read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, pushdown_evaluate, data_transfer);
   } else {
     s = static_cast_with_check<DBImpl, DB>(db->GetRootDB())->ValueFilterImpl(
-        read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, nullptr, callback);
+        read_options, column_family, key, keys, pinnable_val, data_buf, num_entries, join_idx, pushdown_evaluate, data_transfer, nullptr, callback);
   }
   return s;
 }

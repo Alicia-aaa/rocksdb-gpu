@@ -96,7 +96,9 @@ class TableCache {
                      std::vector<FdWithKeyRange *> fds,
                      std::vector<HistogramImpl *> fd_read_hists,
                      std::vector<bool> fd_skip_filters,
-                     std::vector<int> fd_levels);
+                     std::vector<int> fd_levels,
+                     double* pushdown_evaluate,
+                     double* data_transfer);
   
   Status donardFilter(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,
@@ -106,7 +108,7 @@ class TableCache {
                      std::vector<FdWithKeyRange *> fds,
                      std::vector<HistogramImpl *> fd_read_hists,
                      std::vector<bool> fd_skip_filters,
-                     std::vector<int> fd_levels);
+                     std::vector<int> fd_levels, double* pushdown_evaluate, double* data_transfer);
 
   Status ValueFilterBlock(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,
@@ -116,17 +118,17 @@ class TableCache {
                      std::vector<FdWithKeyRange *>& fds,
                      std::vector<HistogramImpl *>& fd_read_hists,
                      std::vector<bool>& fd_skip_filters,
-                     std::vector<int>& fd_levels);
+                     std::vector<int>& fd_levels, double* pushdown_evaluate);
   
   Status _ValueFilterGPU(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       const SliceTransform *prefix_extractor);
+                       const SliceTransform *prefix_extractor, double* pushdown_evaluate, double* data_transfer);
   
   Status _ValueFilterDonard(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       const SliceTransform *prefix_extractor);
+                       const SliceTransform *prefix_extractor, double* pushdown_evaluate, double* data_transfer);
   
   Status AsyncFilter(const ReadOptions& options,
                      const InternalKeyComparator& internal_comparator,

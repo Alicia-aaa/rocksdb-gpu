@@ -351,7 +351,9 @@ class DB {
                              std::vector<PinnableSlice>& /*value*/,
                              char ** /*data_buf*/,
                              uint64_t * /*num_entries*/,
-                             int /*join_idx*/) {
+                             int /*join_idx*/,
+                             double *,
+                             double *) {
     return Status();
   }
   

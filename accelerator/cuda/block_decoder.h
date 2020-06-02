@@ -235,7 +235,7 @@ class donardSlice {
   __device__
   void copyKey(char * key_src, size_t key_size_) {
     key_size = key_size_;
-    memcpy(key, key_src, sizeof(char) * key_size);  
+    memcpy(key, key_src, sizeof(char) * key_size);
   }
   
   char key[16];

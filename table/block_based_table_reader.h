@@ -150,7 +150,7 @@ class BlockBasedTable : public TableReader {
   Status AvxFilterBlock(const ReadOptions& readOptions, const Slice& key,
                    const SlicewithSchema& schema_key,
                    GetContext* get_context,
-                   const SliceTransform* prefix_extractor,
+                   const SliceTransform* prefix_extractor, double *pushdown_evaluate,
                    bool skip_filters = false) override;
 
   // Pre-fetch the disk blocks that correspond to the key range specified by

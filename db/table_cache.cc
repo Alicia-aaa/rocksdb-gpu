@@ -11,7 +11,9 @@
 
 #include <iostream>
 #include <thread>
+#include <sys/time.h>
 #include <time.h>
+
 extern "C" {
 #include <pinpool.h>
 }
@@ -512,11 +514,11 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
                        GetContext* get_context,
                        TableReader * reader,
                        bool reader_skip_filter,
-                       const SliceTransform *prefix_extractor) {
+                       const SliceTransform *prefix_extractor, double* pushdown_evaluate) {
   Status s;
 
   s = reader->AvxFilterBlock(
-        options, k, schema_k, get_context, prefix_extractor, reader_skip_filter);
+        options, k, schema_k, get_context, prefix_extractor, pushdown_evaluate, reader_skip_filter);
 
   return s;
 }
@@ -663,11 +665,17 @@ Status _ValueFilterAVXBlock(const ReadOptions& options,
 //
 //  return Status::OK();
 //}
+double get_time() {
+  struct timeval tv_now;
+  gettimeofday(&tv_now, NULL);
+
+  return (double)tv_now.tv_sec*1000UL + (double)tv_now.tv_usec/1000UL;
+}
 
 Status TableCache::_ValueFilterGPU(const ReadOptions& options,
                        const Slice& k, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       const SliceTransform *prefix_extractor) {
+                       const SliceTransform *prefix_extractor, double* pushdown_evaluate, double* data_transfer) {
 
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
@@ -677,6 +685,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   
   if(!readers.size()) return Status::NotFound();
   
+  double data_tt = get_time(); 
   std::vector<std::vector<char>> datablocks_batch;
   std::vector<std::vector<uint64_t>> seek_indices_batch;
   std::vector<uint64_t> total_entries_batch; 
@@ -731,7 +740,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
   } else {
     err = ruda::recordBlockFilter(
         datablocks, seek_indices, schema_k, total_entries, *get_context->keys_ptr(),
-        *get_context->val_ptr());
+        *get_context->val_ptr(), pushdown_evaluate);
   }
   
 //  for (auto temp_reader : temp_readers) {
@@ -750,6 +759,7 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
     return Status::Aborted();
   }     
   
+  *data_transfer = (get_time() - data_tt) - (*pushdown_evaluate);
   
   if (!readers.size()) return Status::TableEnd();
       
@@ -759,7 +769,8 @@ Status TableCache::_ValueFilterGPU(const ReadOptions& options,
 Status TableCache::_ValueFilterDonard(const ReadOptions& options,
                        const Slice& /*k*/, const SlicewithSchema& schema_k,
                        GetContext* get_context,
-                       const SliceTransform */*prefix_extractor*/) {
+                       const SliceTransform */*prefix_extractor*/,
+                       double* pushdown_evaluate, double* data_transfer) {
 
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
@@ -772,6 +783,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
   std::vector<std::string> file_input;
   std::vector<uint64_t> num_blocks;
 
+  double data_tt = get_time();
   uint64_t load_size = 0;
   uint64_t total_blocks = 0;
   uint64_t total_entries = 0;
@@ -789,7 +801,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
       total_entries += reader->GetTableProperties().get()->num_entries;
 
       /* assume file size is 64 MB (default option) */
-      load_size += 64 * 1024 * 1024;
+      load_size += 500 * 1024 * 1024;
 
       reader->Close();
       fileList.pop_back();
@@ -814,7 +826,11 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
  // std::cout << " block num = " << num_blocks.back() << std::endl;
 
   int err = ruda::donardFilter(file_input, num_blocks, handles, schema_k, total_entries, *get_context->keys_ptr(), 
-          *get_context->val_ptr(), get_context->data_buf_ptr(), get_context->entry_ptr());
+          *get_context->val_ptr(), get_context->data_buf_ptr(), get_context->entry_ptr(), pushdown_evaluate);
+  
+  *data_transfer = (get_time() - data_tt);
+  std::cout << "data_transfer = " << *data_transfer << " && pushdown_evaluate " << *pushdown_evaluate << std::endl;
+  *data_transfer = *data_transfer - (*pushdown_evaluate);
 
 
   file_input.clear();
@@ -871,7 +887,8 @@ Status TableCache::ValueFilter(const ReadOptions& options,
         std::vector<FdWithKeyRange *> fds,
         std::vector<HistogramImpl *> fd_read_hists,
         std::vector<bool> fd_skip_filters,
-        std::vector<int> fd_levels) {
+        std::vector<int> fd_levels,
+        double* pushdown_evaluate, double* data_transfer) {
   Status s;
   size_t fd_count = fds.size();
   std::vector<Cache::Handle *> handles;
@@ -908,7 +925,7 @@ Status TableCache::ValueFilter(const ReadOptions& options,
       break;
     case accelerator::ValueFilterMode::GPU:
       s = _ValueFilterGPU(
-              options, k, schema_k, get_context, prefix_extractor);
+              options, k, schema_k, get_context, prefix_extractor, pushdown_evaluate, data_transfer);
       break;
 
     case accelerator::ValueFilterMode::AVX_BLOCK:
@@ -932,7 +949,7 @@ Status TableCache::donardFilter(const ReadOptions& options,
         std::vector<FdWithKeyRange *> fds,
         std::vector<HistogramImpl *> fd_read_hists,
         std::vector<bool> fd_skip_filters,
-        std::vector<int> fd_levels) {
+        std::vector<int> fd_levels, double* pushdown_evaluate, double* data_transfer) {
   Status s;
   size_t fd_count = fds.size();
   std::vector<Cache::Handle *> handles;
@@ -962,7 +979,7 @@ Status TableCache::donardFilter(const ReadOptions& options,
   }
 
   s = _ValueFilterDonard(
-           options, k, schema_k, get_context, prefix_extractor);
+           options, k, schema_k, get_context, prefix_extractor, pushdown_evaluate, data_transfer);
 
   for (auto handle : handles) {
     ReleaseHandle(handle);
@@ -978,7 +995,7 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
                                std::vector<FdWithKeyRange *> &fds,
                                std::vector<HistogramImpl *> &fd_read_hists,
                                std::vector<bool> &fd_skip_filters,
-                               std::vector<int> &fd_levels) {
+                               std::vector<int> &fd_levels, double *pushdown_evaluate) {
   Status s;
 
   auto &fd = fds.back()->file_metadata->fd;
@@ -1004,7 +1021,7 @@ Status TableCache::ValueFilterBlock(const ReadOptions& options,
       //std::cout << "[TableCache::ValueFilter] Execute AVX Filter" << std::endl;
       s = _ValueFilterAVXBlock(
           options, k, schema_k, get_context, t, fd_skip_filter,
-          prefix_extractor);
+          prefix_extractor, pushdown_evaluate);
       break;
     case accelerator::ValueFilterMode::AVX:
     case accelerator::ValueFilterMode::GPU:

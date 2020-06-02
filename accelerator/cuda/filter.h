@@ -60,7 +60,7 @@ int recordBlockFilter(/* const */ std::vector<char> &datablocks,
                       /* const */ std::vector<uint64_t> &seek_indices,
                       const rocksdb::SlicewithSchema &schema,
                       const size_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys,
-                      std::vector<rocksdb::PinnableSlice> &results);
+                      std::vector<rocksdb::PinnableSlice> &results, double* pushdown_evaluate);
 
 /* Deprecated */
 int recordAsyncFilter(/* const */ std::vector<char> &datablocks,
@@ -70,7 +70,7 @@ int recordAsyncFilter(/* const */ std::vector<char> &datablocks,
                       std::vector<rocksdb::PinnableSlice> &results, ruda::RudaAsyncManager * async_manager);
 
 int donardFilter(std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,
-        uint64_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results, char **data_buf, uint64_t *num_entries);
+        uint64_t max_results_count, std::vector<rocksdb::PinnableSlice> &keys, std::vector<rocksdb::PinnableSlice> &results, char **data_buf, uint64_t *num_entries, double* pushdown_evaluate);
 
 int releaseAsyncManager(ruda::RudaAsyncManager * async_manager);
 

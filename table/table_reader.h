@@ -129,6 +129,7 @@ class TableReader {
                            const SlicewithSchema& /* schema_key */,
                            GetContext* /* get_context */,
                            const SliceTransform* /* prefix_extractor */,
+                           double *,
                            bool /* skip_filters*/) {
     return Status();
   }

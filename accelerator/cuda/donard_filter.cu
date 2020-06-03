@@ -229,7 +229,7 @@ struct DonardManager {
    /**************************SORT IMPLEMENTATION END****************************/
 
     unsigned long long int left = 0;
-    unsigned long long int right = *num_entries_ - 1;
+    unsigned long long int right = count;
     h_results = (donardSlice *)malloc(sizeof(donardSlice) * count);
     cudaCheckError(cudaMemcpy(h_results, d_results, sizeof(donardSlice) * count, cudaMemcpyDeviceToHost));
 

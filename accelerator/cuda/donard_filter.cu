@@ -511,10 +511,9 @@ void kernel::selection_sort(donardSlice *d_results, unsigned long long int* d_re
     int min_val = d_results[d_result_idx_arr[i]].k_int;
     int min_idx = i;
 
-    // Find the smallest value in the range [left, right].
     for( int j = i+1 ; j <= right ; ++j ) {
       int val_j = d_results[d_result_idx_arr[j]].k_int;
-      if (val_j < min_val < 0) {
+      if (val_j < min_val) {
         min_idx = j;
         min_val = val_j;
       }

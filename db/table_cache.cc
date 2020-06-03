@@ -774,7 +774,8 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
 
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
-  uint64_t gpu_loadable_size = 8ULL << 30; // 13GB 
+  //uint64_t gpu_loadable_size = 8ULL << 30; // 13GB 
+  uint64_t gpu_loadable_size = 1ULL << 30; // 13GB 
  
  // std::cout << " fileList size  : " << fileList.size() << std::endl;
   

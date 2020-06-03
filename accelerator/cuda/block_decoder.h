@@ -236,9 +236,17 @@ class donardSlice {
   void copyKey(char * key_src, size_t key_size_) {
     key_size = key_size_;
     memcpy(key, key_src, sizeof(char) * key_size);
+    //memcpy(key_temp, key_src + 4, sizeof(char) * 4);
+    key_temp[3] = (char) (key_src[4] ^ 128);
+    key_temp[2] = key_src[5];
+    key_temp[1] = key_src[6];
+    key_temp[0] = key_src[7];
+    k_int = (int32_t)(*((int32_t *)key_temp));
   }
-  
+    
   char key[16];
+  char key_temp[4];
+  int32_t k_int;
   size_t key_size;
   const char* d_data;
   size_t d_size;

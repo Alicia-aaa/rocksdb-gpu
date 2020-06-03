@@ -20,7 +20,7 @@ extern "C" {
 #define MB 1024 * KB
 #define GB 1024 * MB
 #define MAX_DEPTH       24
-#define SELECTION_SORT  32
+#define SELECTION_SORT  16
 
 #define cudaCheckError(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
@@ -495,7 +495,7 @@ int kernel::memcmp_slice(const void* s1, const void* s2, size_t n) {
   const unsigned char *p2 = (const unsigned char *) s2;
   p1 += 4;
   p2 += 4;
-  n -= 7;
+  n -= 4;
   while(n--)
     if( *p1 != *p2 )
       return *p1 - *p2;
@@ -507,15 +507,14 @@ int kernel::memcmp_slice(const void* s1, const void* s2, size_t n) {
 __device__ 
 void kernel::selection_sort(donardSlice *d_results, unsigned long long int* d_result_idx_arr,
                             unsigned long long int left, unsigned long long int right) {
-  int key_size = d_results[0].key_size;
   for( int i = left ; i <= right ; ++i ) {
-    char* min_val = d_results[d_result_idx_arr[i]].key;
+    int min_val = d_results[d_result_idx_arr[i]].k_int;
     int min_idx = i;
 
     // Find the smallest value in the range [left, right].
     for( int j = i+1 ; j <= right ; ++j ) {
-      char* val_j = d_results[d_result_idx_arr[j]].key;
-      if (memcmp_slice(val_j, min_val, key_size) < 0) {
+      int val_j = d_results[d_result_idx_arr[j]].k_int;
+      if (val_j < min_val < 0) {
         min_idx = j;
         min_val = val_j;
       }
@@ -538,40 +537,25 @@ void kernel::cdp_simple_quicksort(donardSlice* d_results, unsigned long long int
     return;
   }
 
-  cudaStream_t s,s1;
-//  donardSlice* lptr = d_results + left;
-//  donardSlice* rptr = d_results + right;
-//  donardSlice pivot = d_results[(left + right)/2];
-
   unsigned long long int *lptr = d_result_idx_arr + left;
   unsigned long long int *rptr = d_result_idx_arr + right;
   unsigned long long int pivot = d_result_idx_arr[(left + right)/2];
 
-  int key_size = d_results[0].key_size;
-
-  char* lval;
-  char* rval;
-  char* pval;
-
-  unsigned long long int nright, nleft;
-
-  // Do the partitioning.
   while (lptr <= rptr) {
-    // Find the next left- and right-hand values to swap
-    lval = d_results[(*lptr)].key;
-    rval = d_results[(*rptr)].key;
-    pval = d_results[pivot].key;
+    int lval = d_results[(*lptr)].k_int;
+    int rval = d_results[(*rptr)].k_int;
+    int pval = d_results[pivot].k_int;
 
     // Move the left pointer as long as the pointed element is smaller than the pivot.
-    while ((memcmp_slice(lval, pval, key_size) < 0) && (lptr < d_result_idx_arr + right)) {
+    while (lval < pval) {
       lptr++;
-      lval = d_results[(*lptr)].key;
+      lval = d_results[(*lptr)].k_int;
     }
 
     // Move the right pointer as long as the pointed element is larger than the pivot.
-    while ((memcmp_slice(rval, pval, key_size) > 0) && (rptr > d_result_idx_arr + left)) {
+    while (rval > pval) {
       rptr--;
-      rval = d_results[(*rptr)].key;
+      rval = d_results[(*rptr)].k_int;
     }
 
     // If the swap points are valid, do the swap!
@@ -584,19 +568,18 @@ void kernel::cdp_simple_quicksort(donardSlice* d_results, unsigned long long int
     }
   }
 
-    // Now the recursive part
-  nright = rptr - d_result_idx_arr;
-  nleft  = lptr - d_result_idx_arr;
+  unsigned long long int nright = rptr - d_result_idx_arr;
+  unsigned long long int nleft  = lptr - d_result_idx_arr;
 
-  // Launch a new block to sort the left part.
-  if (left < (rptr - d_result_idx_arr)){
+  if (left < (rptr - d_result_idx_arr)) {
+    cudaStream_t s;
     cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking);
     cdp_simple_quicksort<<< 1, 1, 0, s >>>(d_results, d_result_idx_arr, left, nright, depth+1);
     cudaStreamDestroy(s);
   }
 
-  // Launch a new block to sort the right part.
   if ((lptr - d_result_idx_arr) < right) {
+    cudaStream_t s1;
     cudaStreamCreateWithFlags(&s1, cudaStreamNonBlocking);
     cdp_simple_quicksort<<< 1, 1, 0, s1 >>>(d_results, d_result_idx_arr, nleft, right, depth+1);
     cudaStreamDestroy(s1);

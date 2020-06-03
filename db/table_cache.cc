@@ -775,7 +775,8 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
     /* TODO : Partial Processing */
   // Splits readers by GPU-loadable size.
   //uint64_t gpu_loadable_size = 8ULL << 30; // 13GB 
-  uint64_t gpu_loadable_size = 1ULL << 30; // 13GB 
+  //uint64_t gpu_loadable_size = 1ULL << 10; // 13GB 
+  uint64_t gpu_loadable_size = 5 * 1024 * 1024 * 1024ULL;
  
  // std::cout << " fileList size  : " << fileList.size() << std::endl;
   
@@ -789,11 +790,13 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
   uint64_t total_blocks = 0;
   uint64_t total_entries = 0;
   std::vector<uint64_t> handles;
+  int idx = 0;
   
   while(fileList.size()) {    
       auto file = fileList.back();
       auto reader = readers.back();
       file_input.push_back(file);
+      idx++;
       uint64_t blocks = reader->GetTableProperties().get()->num_data_blocks;
       reader->GetBlockHandles(options, handles);    
            
@@ -809,10 +812,10 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
       readers.pop_back();
 
       if (load_size > gpu_loadable_size) {
-          break;
+        break;
       }
   }
-
+  std::cout << "File Num : " << idx << "/ " << fileList.size() << std::endl;  
   Status s = Status::OK();
   /* Is it neccessary ?
   if (seek_indices.size() < options.threshold_seek_indices_size) {
@@ -830,7 +833,7 @@ Status TableCache::_ValueFilterDonard(const ReadOptions& options,
           *get_context->val_ptr(), get_context->data_buf_ptr(), get_context->entry_ptr(), pushdown_evaluate);
   
   *data_transfer = (get_time() - data_tt);
-  std::cout << "data_transfer = " << *data_transfer << " && pushdown_evaluate " << *pushdown_evaluate << std::endl;
+  //std::cout << "data_transfer = " << *data_transfer << " && pushdown_evaluate " << *pushdown_evaluate << std::endl;
   *data_transfer = *data_transfer - (*pushdown_evaluate);
 
 

@@ -252,6 +252,12 @@ class donardSlice {
   size_t d_size;
 };
 
+class donardSliceIdx {
+ public:
+   int ori_idx;
+   int32_t k_int;
+};
+
 // GPU-accessable Schema
 // Copy class of SlicewithSchema
 class RudaSchema {

@@ -32,6 +32,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 }
 
 namespace ruda {
+
+void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, unsigned long long int left, unsigned long long int right);
 namespace kernel {
 __global__
 void rudaDonardFilterKernel(char **file_address, uint64_t size, uint64_t *block_index, uint64_t *g_block_index, uint64_t block_unit, uint64_t *handles,
@@ -189,7 +191,7 @@ struct DonardManager {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    std::cout << "Filterig" << std::endl;
+    //std::cout << "Filterig" << std::endl;
     cudaEventRecord(start);
    // std::cout << "[DONARD KERNEL EXECUTE] : " << gpu_blocks_.back() << std::endl;
     kernel::rudaDonardFilterKernel<<< gpu_blocks_.back(), num_thread_ >>> (file_address, num_file_, block_index, g_block_index, block_unit_, d_handles,
@@ -212,25 +214,29 @@ struct DonardManager {
     if (remain != 0) blockGrid += 1;
 
    /**************************SORT IMPLEMENTATION START****************************/
-    cudaCheckError(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, MAX_DEPTH));
+    //cudaCheckError(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, MAX_DEPTH));
   
-    unsigned long long int left = 0;
-    unsigned long long int right = *num_entries_ - 1;
-    std::cout << "Make INDEX " << std::endl;
-    cudaCheckError(cudaMalloc((void **) &d_result_idx_arr, sizeof(unsigned long long int) * (right + 1)));
-    kernel::makeIndex<<< blockGrid, num_thread_ >>> (count, d_result_idx_arr);
+    //unsigned long long int left = 0;
+    //unsigned long long int right = *num_entries_ - 1;
+    //std::cout << "Make INDEX " << std::endl;
+    //cudaCheckError(cudaMalloc((void **) &d_result_idx_arr, sizeof(unsigned long long int) * (right + 1)));
+    //kernel::makeIndex<<< blockGrid, num_thread_ >>> (count, d_result_idx_arr);
 
-    std::cout << "Sorting on the GPU : " << right << std::endl;
-    kernel::cdp_simple_quicksort<<<1, 1>>>(d_results, d_result_idx_arr, left, right, 0);
-    cudaCheckError(cudaDeviceSynchronize());
+    //std::cout << "Sorting on the GPU : " << right << std::endl;
+    //kernel::cdp_simple_quicksort<<<1, 1>>>(d_results, d_result_idx_arr, left, right, 0);
+    //cudaCheckError(cudaDeviceSynchronize());
 
    /**************************SORT IMPLEMENTATION END****************************/
-    std::cout << "Copying Device to Host" << std::endl;
+
+    unsigned long long int left = 0;
+    unsigned long long int right = *num_entries_ - 1;
     h_results = (donardSlice *)malloc(sizeof(donardSlice) * count);
     cudaCheckError(cudaMemcpy(h_results, d_results, sizeof(donardSlice) * count, cudaMemcpyDeviceToHost));
 
     h_result_idx_arr = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
-    cudaCheckError(cudaMemcpy(h_result_idx_arr, d_result_idx_arr, sizeof(unsigned long long int) * count, cudaMemcpyDeviceToHost));
+    for(int i = 0; i < count; i++) h_result_idx_arr[i] = i;
+    //std::cout << "Sorting on the CPU Quick" << std::endl;
+    quick_sort(h_results, h_result_idx_arr, left, right);
 
     h_target_idx = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
 
@@ -241,6 +247,11 @@ struct DonardManager {
         h_target_idx[i] = h_target_idx[i-1] + h_results[h_result_idx_arr[i-1]].key_size + h_results[h_result_idx_arr[i-1]].d_size + 4;
       results_size += h_results[i].key_size + h_results[i].d_size + 4;
     }
+
+    //std::cout << "Copying Device to Host" << std::endl;
+
+    cudaCheckError(cudaMalloc((void **) &d_result_idx_arr, sizeof(unsigned long long int) * count));
+    cudaCheckError(cudaMemcpy(d_result_idx_arr, h_result_idx_arr, sizeof(unsigned long long int) * count, cudaMemcpyHostToDevice));
 
     cudaCheckError(cudaMalloc((void **) &d_target_idx, sizeof(unsigned long long int) * count));
     cudaCheckError(cudaMemcpy(d_target_idx, h_target_idx, sizeof(unsigned long long int) * count, cudaMemcpyHostToDevice));
@@ -589,6 +600,49 @@ __global__
 void kernel::testKernel(unsigned long long int count, donardSlice *d_results, unsigned long long int *total_results_idx) {
   unsigned long long int idx = blockDim.x * blockIdx.x + threadIdx.x;
   printf("idx : %d\n", idx);
+}
+
+void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, 
+                unsigned long long int left, unsigned long long int right) {
+  
+
+  unsigned long long int* lptr = h_result_idx_arr + left;
+  unsigned long long int* rptr = h_result_idx_arr + right;
+  unsigned long long int pivot = h_result_idx_arr[(left + right)/ 2];
+
+  while(lptr <= rptr) {
+    int lval = h_results[(*lptr)].k_int;
+    int rval = h_results[(*rptr)].k_int;
+    int pval = h_results[pivot].k_int;
+
+    while(lval < pval) {
+      lptr++;
+      lval = h_results[(*lptr)].k_int;
+    }
+    while(rval > pval) {
+      rptr--;
+      rval = h_results[(*rptr)].k_int;
+    }
+
+    if(lptr <= rptr) {
+      unsigned long long int temp = *lptr;
+      *lptr = *rptr;
+      *rptr = temp;
+      lptr++;
+      rptr--;
+    }
+  }
+
+  unsigned long long int nright = rptr - h_result_idx_arr;
+  unsigned long long int nleft  = lptr - h_result_idx_arr;
+
+  if(left < nright) {
+    quick_sort(h_results, h_result_idx_arr, left, nright);
+  }
+
+  if(nleft < right) {
+    quick_sort(h_results, h_result_idx_arr, nleft, right);
+  }
 }
 
 int donardFilter( std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,

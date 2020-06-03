@@ -606,22 +606,23 @@ void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr
                 unsigned long long int left, unsigned long long int right) {
   
 
+  int key_size = h_results[0].key_size;
   unsigned long long int* lptr = h_result_idx_arr + left;
   unsigned long long int* rptr = h_result_idx_arr + right;
   unsigned long long int pivot = h_result_idx_arr[(left + right)/ 2];
 
   while(lptr <= rptr) {
-    int lval = h_results[(*lptr)].k_int;
-    int rval = h_results[(*rptr)].k_int;
-    int pval = h_results[pivot].k_int;
+    char* lval = h_results[(*lptr)].key;
+    char* rval = h_results[(*rptr)].key;
+    char* pval = h_results[pivot].key;
 
-    while(lval < pval) {
+    while(memcmp(lval, pval, key_size) < 0) {
       lptr++;
-      lval = h_results[(*lptr)].k_int;
+      lval = h_results[(*lptr)].key;
     }
-    while(rval > pval) {
+    while(memcmp(rval, pval, key_size) > 0) {
       rptr--;
-      rval = h_results[(*rptr)].k_int;
+      rval = h_results[(*rptr)].key;
     }
 
     if(lptr <= rptr) {

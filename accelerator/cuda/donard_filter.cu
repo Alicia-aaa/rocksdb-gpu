@@ -236,7 +236,7 @@ struct DonardManager {
     h_result_idx_arr = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
     for(int i = 0; i < count; i++) h_result_idx_arr[i] = i;
     //std::cout << "Sorting on the CPU Quick" << std::endl;
-    quick_sort(h_results, h_result_idx_arr, left, right);
+    quick_sort(h_results, h_result_idx_arr, left, right-1);
 
     h_target_idx = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
 
@@ -605,24 +605,27 @@ void kernel::testKernel(unsigned long long int count, donardSlice *d_results, un
 void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, 
                 unsigned long long int left, unsigned long long int right) {
   
-
-  int key_size = h_results[0].key_size;
   unsigned long long int* lptr = h_result_idx_arr + left;
   unsigned long long int* rptr = h_result_idx_arr + right;
   unsigned long long int pivot = h_result_idx_arr[(left + right)/ 2];
 
-  while(lptr <= rptr) {
-    char* lval = h_results[(*lptr)].key;
-    char* rval = h_results[(*rptr)].key;
-    char* pval = h_results[pivot].key;
+  int lval;
+  int rval;
+  int pval;
 
-    while(memcmp(lval, pval, key_size) < 0) {
+  while(lptr <= rptr) {
+    lval = h_results[(*lptr)].k_int;
+    rval = h_results[(*rptr)].k_int;
+    pval = h_results[pivot].k_int;
+
+    while(lval < pval) {
       lptr++;
-      lval = h_results[(*lptr)].key;
+      lval = h_results[(*lptr)].k_int;
     }
-    while(memcmp(rval, pval, key_size) > 0) {
+
+    while(rval > pval) {
       rptr--;
-      rval = h_results[(*rptr)].key;
+      rval = h_results[(*rptr)].k_int;
     }
 
     if(lptr <= rptr) {

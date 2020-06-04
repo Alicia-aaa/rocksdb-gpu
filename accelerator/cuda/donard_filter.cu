@@ -32,8 +32,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 }
 
 namespace ruda {
-
-void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, unsigned long long int left, unsigned long long int right);
+void quickSortI(donardSlice* h_results, unsigned long long int* h_result_idx_arr, unsigned long long int left, unsigned long long int right);
+void selection_sort(donardSlice *h_results, unsigned long long int* h_result_idx_arr, unsigned long long int left, unsigned long long int right); 
+void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, unsigned long long int left, unsigned long long int right, int depth);
 namespace kernel {
 __global__
 void rudaDonardFilterKernel(char **file_address, uint64_t size, uint64_t *block_index, uint64_t *g_block_index, uint64_t block_unit, uint64_t *handles,
@@ -193,7 +194,7 @@ struct DonardManager {
 
     //std::cout << "Filterig" << std::endl;
     cudaEventRecord(start);
-   // std::cout << "[DONARD KERNEL EXECUTE] : " << gpu_blocks_.back() << std::endl;
+    //std::cout << "[DONARD KERNEL EXECUTE] : " << gpu_blocks_.back() << std::endl;
     kernel::rudaDonardFilterKernel<<< gpu_blocks_.back(), num_thread_ >>> (file_address, num_file_, block_index, g_block_index, block_unit_, d_handles,
                              d_schema, d_results_idx, d_results);
     cudaEventRecord(stop);
@@ -235,9 +236,10 @@ struct DonardManager {
 
     h_result_idx_arr = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
     for(int i = 0; i < count; i++) h_result_idx_arr[i] = i;
-    //std::cout << "Sorting on the CPU Quick" << std::endl;
-    quick_sort(h_results, h_result_idx_arr, left, right-1);
-
+    // std::cout << "Sorting on the CPU Quick : " << count << std::endl;
+    // selection_sort(h_results, h_result_idx_arr, left, right-1);
+    // quick_sort(h_results, h_result_idx_arr, left, right-1, 0);
+    quickSortI(h_results, h_result_idx_arr, left, right - 1);
     h_target_idx = (unsigned long long int *)malloc(sizeof(unsigned long long int) * count);
 
     for(uint i = 0; i < count ; i++) {
@@ -514,7 +516,7 @@ int kernel::memcmp_slice(const void* s1, const void* s2, size_t n) {
       p1++,p2++;
     return 0;
 }
-
+/*
 __device__ 
 void kernel::selection_sort(donardSlice *d_results, unsigned long long int* d_result_idx_arr,
                             unsigned long long int left, unsigned long long int right) {
@@ -595,37 +597,71 @@ void kernel::cdp_simple_quicksort(donardSlice* d_results, unsigned long long int
     cudaStreamDestroy(s1);
   }
 }
-
+*/
 __global__
 void kernel::testKernel(unsigned long long int count, donardSlice *d_results, unsigned long long int *total_results_idx) {
   unsigned long long int idx = blockDim.x * blockIdx.x + threadIdx.x;
   printf("idx : %d\n", idx);
 }
 
+int compare(unsigned int a[], unsigned int b[], int pk_num) {
+  for(int i = 0; i < pk_num; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  } 
+  return 0;
+}
+
+void selection_sort(donardSlice *h_results, unsigned long long int* h_result_idx_arr,
+                            unsigned long long int left, unsigned long long int right) {
+  for( int i = left ; i <= right ; ++i ) {
+    char* min_val = h_results[h_result_idx_arr[i]].key;
+    int min_idx = i;
+
+    for( int j = i+1 ; j <= right ; ++j ) {
+      char* val_j = h_results[h_result_idx_arr[j]].key;
+      if (val_j < min_val) {
+        min_idx = j;
+        min_val = val_j;
+      }
+    }
+
+    // Swap the values.
+    if( i != min_idx ) {
+      unsigned long long int temp = h_result_idx_arr[i]; 
+      h_result_idx_arr[i] = h_result_idx_arr[min_idx];
+      h_result_idx_arr[min_idx] = temp;
+    }
+  }
+}
+
 void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr, 
-                unsigned long long int left, unsigned long long int right) {
-  
+                unsigned long long int left, unsigned long long int right, int depth) {
+ 
+  if(depth % 1000 == 0) std::cout << "depth : " << depth << std::endl;
+  int key_size = h_results[0].key_size;
+
   unsigned long long int* lptr = h_result_idx_arr + left;
   unsigned long long int* rptr = h_result_idx_arr + right;
   unsigned long long int pivot = h_result_idx_arr[(left + right)/ 2];
 
-  int lval;
-  int rval;
-  int pval;
+  char* lval;
+  char* rval;
+  char* pval;
 
   while(lptr <= rptr) {
-    lval = h_results[(*lptr)].k_int;
-    rval = h_results[(*rptr)].k_int;
-    pval = h_results[pivot].k_int;
+    lval = h_results[(*lptr)].key;
+    rval = h_results[(*rptr)].key;
+    pval = h_results[pivot].key;
 
-    while(lval < pval) {
+    while(memcmp(lval, pval, key_size) < 0 && ((lptr - h_result_idx_arr) < right)) {
       lptr++;
-      lval = h_results[(*lptr)].k_int;
+      lval = h_results[(*lptr)].key;
     }
 
-    while(rval > pval) {
+    while(memcmp(rval, pval, key_size) > 0 && ((rptr - h_result_idx_arr) > left)) {
       rptr--;
-      rval = h_results[(*rptr)].k_int;
+      rval = h_results[(*rptr)].key;
     }
 
     if(lptr <= rptr) {
@@ -641,12 +677,114 @@ void quick_sort(donardSlice* h_results, unsigned long long int* h_result_idx_arr
   unsigned long long int nleft  = lptr - h_result_idx_arr;
 
   if(left < nright) {
-    quick_sort(h_results, h_result_idx_arr, left, nright);
+    quick_sort(h_results, h_result_idx_arr, left, nright, depth+1);
   }
 
   if(nleft < right) {
-    quick_sort(h_results, h_result_idx_arr, nleft, right);
+    quick_sort(h_results, h_result_idx_arr, nleft, right, depth+1);
   }
+}
+
+typedef unsigned long long item;
+
+typedef struct stack
+{
+  uint32_t size;
+  uint32_t top;
+  item *entries;
+} stack;
+
+# define MIN_STACK 128
+# define INVALID   0xDeadD00d
+# define SWAP(x, y)     { unsigned long long int t = x; x = y; y = t; }
+
+stack *newStack() {
+  stack *s = (stack *) calloc(MIN_STACK, sizeof(stack));
+  if (s) {
+    s->size = MIN_STACK;
+    s->top = 0;
+    s->entries = (item *) calloc(MIN_STACK, sizeof(item));
+    if (s->entries) {
+      return s;
+    }
+  }
+  return (stack *)0;
+}
+
+void delStack(stack *s) {
+  if (s->entries) {
+    free(s->entries);
+  }
+  if (s) {
+    free(s);
+  }
+  return;
+}
+
+item pop(stack *s) {
+  if (s && s->top > 0) {
+    s->top -= 1;
+    return s->entries[s->top];
+  }
+  return INVALID;
+}
+
+void push(stack *s, item i) {
+  if (s) {
+    if (s->top == s->size) {
+      s->size *= 2;
+      s->entries = (item *) realloc(s->entries, s->size * sizeof(item));
+    }
+    s->entries[s->top] = i;
+    s->top += 1;
+  }
+  return;
+}
+
+bool empty(stack *s) { return s->top == 0; }
+
+unsigned long long int partition(donardSlice* h_results, unsigned long long int* h_result_idx_arr, 
+              unsigned long long int left, unsigned long long int right, int key_size) {
+  unsigned long long int pivotValue = h_result_idx_arr[(left + right) / 2];
+
+  unsigned long long int i = left - 1;
+  unsigned long long int j = right + 1;
+  do {
+    do {
+      i += 1;
+    } while (memcmp(h_results[h_result_idx_arr[i]].key, h_results[pivotValue].key, key_size) < 0);
+    do {
+      j -= 1;
+    } while (memcmp(h_results[h_result_idx_arr[j]].key, h_results[pivotValue].key, key_size) > 0);
+    if (i < j) {
+      SWAP(h_result_idx_arr[i], h_result_idx_arr[j]);
+    }
+  } while (i < j);
+  return j;
+}
+
+void quickSortI(donardSlice* h_results, unsigned long long int* h_result_idx_arr, 
+                unsigned long long int left, unsigned long long int right) {
+  stack *s = newStack();
+
+  int key_size = h_results[0].key_size;
+  push(s, left);
+  push(s, right);
+  while (!empty(s)) {
+    unsigned long long int high = pop(s);
+    unsigned long long int low = pop(s);
+    unsigned long long int p = partition(h_results, h_result_idx_arr, low, high, key_size);
+    if (p + 1 < high) {
+      push(s, p + 1);
+      push(s, high);
+    }
+    if (low < p) {
+      push(s, low);
+      push(s, p);
+    }
+  }
+  delStack(s);
+  return;
 }
 
 int donardFilter( std::vector<std::string> files, std::vector<uint64_t> num_blocks, std::vector<uint64_t> handles, const rocksdb::SlicewithSchema &schema,
